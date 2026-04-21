@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>几何图形生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 10px;
+            background: #f5f5f5;
+        }
+        #container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        #commandInput {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        #commandInput:focus {
+            outline: none;
+            border-color: #4a90d9;
+        }
+        #canvasContainer {
+            background: white;
+            border-radius: 8px;
+            overflow: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            max-height: 70vh;
+        }
+        canvas {
+            display: block;
+            transform-origin: top left;
+        }
+        #help {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+        #help summary {
+            cursor: pointer;
+            font-weight: bold;
+            color: #333;
+        }
+        #help ul {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+        #help li {
+            margin: 5px 0;
+        }
+        .cmd {
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        #zoomControls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        .zoomBtn {
+            padding: 8px 16px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .zoomBtn:hover {
+            border-color: #4a90d9;
+            background: #f0f7ff;
+        }
+        .zoomBtn:active {
+            transform: scale(0.95);
+        }
+        #zoomLevel {
+            font-size: 14px;
+            color: #666;
+            min-width: 60px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <input type="text" id="commandInput" placeholder="输入命令，例如：矩形abcd 或 圆O">
+        <div id="zoomControls">
+            <button class="zoomBtn" id="zoomOut">−</button>
+            <span id="zoomLevel">100%</span>
+            <button class="zoomBtn" id="zoomIn">+</button>
+            <button class="zoomBtn" id="zoomReset">重置</button>
+        </div>
+        <div id="canvasContainer">
+            <canvas id="canvas" width="1600" height="1200"></canvas>
+        </div>
+        <details id="help">
+            <summary>命令帮助</summary>
+            <ul>
+                <li><span class="cmd">矩形 A B C D [颜色] [填充]</span> - 自动居中画矩形（推荐）</li>
+                <li><span class="cmd">矩形 abcd [颜色] [填充]</span> - 简写方式，自动拆分为A B C D</li>
+                <li><span class="cmd">三角形 A B C [颜色] [填充]</span> - 自动居中画三角形（推荐）</li>
+                <li><span class="cmd">三角形 abc [颜色] [填充]</span> - 简写方式，自动拆分为A B C</li>
+                <li><span class="cmd">直线 A B [颜色]</span> - 自动居中画直线（推荐）</li>
+                <li><span class="cmd">圆 O [颜色] [填充]</span> - 自动居中画圆（推荐）</li>
+                <li><span class="cmd">点 A [颜色]</span> - 自动生成点</li>
+                <li><span class="cmd">点 A B C D [颜色]</span> - 自动生成多个点</li>
+                <li><span class="cmd">中点 A B M [颜色]</span> - M是A和B的中点</li>
+                <li><span class="cmd">分点 A B M 1/3 [颜色]</span> - M是A到B的1/3分点</li>
+                <li><span class="cmd">坐标系 [颜色]</span> - 绘制数学坐标系（带X/Y轴和刻度）</li>
+                <li><span class="cmd">正比例 k [颜色]</span> - 绘制正比例函数 y=kx（k默认1）</li>
+                <li><span class="cmd">反比例 k [颜色]</span> - 绘制反比例函数 y=k/x（k默认1）</li>
+                <li><span class="cmd">二次函数 a b c [颜色]</span> - 绘制一元二次函数 y=ax²+bx+c</li>
+                <li><span class="cmd">清空</span> - 清空画布</li>
+                <li>颜色：红、蓝、绿、黄、紫、橙、黑</li>
+                <li>填充：加"填充"或"fill"可填充图形（默认不填充）</li>
+                <li style="margin-top:10px; font-weight:bold;">传统坐标模式（可选）：</li>
+                <li><span class="cmd">矩形 A(x,y) B(x,y) C(x,y) D(x,y) [颜色] [填充]</span></li>
+                <li><span class="cmd">三角形 A(x,y) B(x,y) C(x,y) [颜色] [填充]</span></li>
+                <li><span class="cmd">直线 A(x,y) B(x,y) [颜色]</span></li>
+                <li><span class="cmd">圆 圆心(x,y) 半径r [颜色] [填充]</span></li>
+                <li><span class="cmd">点 N(x,y) [颜色]</span></li>
+            </ul>
+        </details>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const commandInput = document.getElementById('commandInput');
+
+        // 保存所有已定义的点
+        const points = {};
+
+        // 颜色映射
+        const colorMap = {
+            '红': '#ff4444',
+            '蓝': '#4444ff',
+            '绿': '#44aa44',
+            '黄': '#ffaa00',
+            '紫': '#aa44aa',
+            '橙': '#ff8800',
+            '黑': '#333333'
+        };
+
+        // 默认透明度
+        const defaultAlpha = 0.5;
+
+        // 解析坐标点，例如 "A(100,200)" -> {name: 'A', x: 100, y: 200}
+        // 或者只是点名称 "A" -> 从points中查找
+        function parsePoint(str) {
+            // 先检查是否是已保存的点名称
+            if (points[str]) {
+                return points[str];
+            }
+            const match = str.match(/^([A-Za-z]+)?\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+            if (match) {
+                const point = {
+                    name: match[1] || '',
+                    x: parseInt(match[2]),
+                    y: parseInt(match[3])
+                };
+                // 如果有名称，保存这个点
+                if (point.name) {
+                    points[point.name] = point;
+                }
+                return point;
+            }
+            return null;
+        }
+
+        // 解析颜色
+        function parseColor(parts) {
+            for (let i = parts.length - 1; i >= 0; i--) {
+                if (colorMap[parts[i]]) {
+                    return {
+                        color: colorMap[parts[i]],
+                        index: i
+                    };
+                }
+            }
+            return { color: colorMap['黑'], index: -1 };
+        }
+
+        // 记录已标注的点，避免重复
+        const labeledPoints = new Set();
+        
+        // 获取下一个可用的字母标签（跳过已使用的）
+        function getNextAvailableLetter(startIndex = 0) {
+            const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+            for (let i = startIndex; i &lt; alphabet.length; i++) {
+                const letter = alphabet[i];
+                if (!points[letter]) {
+                    return letter;
+                }
+            }
+            // 如果小写字母用完了，用大写
+            for (let i = 0; i &lt; alphabet.length; i++) {
+                const letter = alphabet[i].toUpperCase();
+                if (!points[letter]) {
+                    return letter;
+                }
+            }
+            return 'a' + startIndex; // 备用方案
+        }
+        
+        // 获取多个连续的可用字母
+        function getNextAvailableLetters(count) {
+            const result = [];
+            let index = 0;
+            while (result.length &lt; count) {
+                const letter = getNextAvailableLetter(index);
+                result.push(letter);
+                // 找到这个字母在字母表中的位置，从下一个继续
+                const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+                const pos = alphabet.indexOf(letter.toLowerCase());
+                index = pos &gt;= 0 ? pos + 1 : index + 1;
+            }
+            return result;
+        }
+        
+        // 画布基准尺寸（用于计算默认图形位置和大小）
+        const baseWidth = 800;
+        const baseHeight = 600;
+        const centerX = baseWidth / 2;
+        const centerY = baseHeight / 2;
+        // 占画布1/4的尺寸（基于基准尺寸，固定不变）
+        const autoSize = Math.min(baseWidth, baseHeight) / 4;
+        
+        // 缩放相关
+        let currentZoom = 1;
+        const minZoom = 0.5;
+        const maxZoom = 2;
+        const zoomStep = 0.25;
+        
+        // 命令历史，用于重绘
+        const commandHistory = [];
+        
+        // 应用缩放（使用CSS transform，图形不会丢失）
+        function applyZoom() {
+            canvas.style.transform = `scale(${currentZoom})`;
+            document.getElementById('zoomLevel').textContent = Math.round(currentZoom * 100) + '%';
+        }
+        
+        // 计算并保存相对位置点
+        function autoRectangle(pointNames) {
+            const halfWidth = autoSize;
+            const halfHeight = autoSize * 0.75;
+            const positions = [
+                { x: centerX - halfWidth, y: centerY - halfHeight },
+                { x: centerX + halfWidth, y: centerY - halfHeight },
+                { x: centerX + halfWidth, y: centerY + halfHeight },
+                { x: centerX - halfWidth, y: centerY + halfHeight }
+            ];
+            const result = [];
+            pointNames.forEach((name, i) => {
+                const pos = positions[i % positions.length];
+                const point = { name: name, x: pos.x, y: pos.y };
+                points[name] = point;
+                result.push(point);
+            });
+            return result;
+        }
+        
+        // 自动生成直线的两个点（居中，占1/4大小）
+        function autoLine(pointNames) {
+            if (pointNames.length >= 2) {
+                const p1 = { name: pointNames[0], x: centerX - autoSize, y: centerY };
+                const p2 = { name: pointNames[1], x: centerX + autoSize, y: centerY };
+                points[pointNames[0]] = p1;
+                points[pointNames[1]] = p2;
+                const result = [p1, p2];
+                for (let i = 2; i < pointNames.length; i++) {
+                    const angle = (i - 1) * Math.PI / 4;
+                    const p = { 
+                        name: pointNames[i], 
+                        x: centerX + Math.cos(angle) * autoSize, 
+                        y: centerY + Math.sin(angle) * autoSize 
+                    };
+                    points[pointNames[i]] = p;
+                    result.push(p);
+                }
+                return result;
+            }
+            return [];
+        }
+        
+        // 自动生成圆（居中，占1/4大小）
+        function autoCircle(centerName) {
+            const center = { name: centerName || 'O', x: centerX, y: centerY };
+            points[center.name] = center;
+            return { center: center, radius: autoSize };
+        }
+        
+        // 自动生成单个点（居中或环绕排列）
+        function autoPoint(pointName, index = 0) {
+            if (index === 0) {
+                const point = { name: pointName, x: centerX, y: centerY };
+                points[pointName] = point;
+                return point;
+            } else {
+                const angle = (index - 1) * Math.PI / 4;
+                const point = { 
+                    name: pointName, 
+                    x: centerX + Math.cos(angle) * autoSize, 
+                    y: centerY + Math.sin(angle) * autoSize 
+                };
+                points[pointName] = point;
+                return point;
+            }
+        }
+        
+        // 检查是否是纯点名称（不含坐标）
+        function isPurePointName(str) {
+            return /^[A-Za-z]+$/.test(str) && !str.includes('(') && !str.includes(')');
+        }
+        
+        // 提取点名称列表（支持abcd这种连续写法）
+        function extractPointNames(str) {
+            // 如果是单个字母序列，如abcd，拆分成单个字母
+            if (/^[A-Za-z]+$/.test(str) && str.length > 1) {
+                return str.split('');
+            }
+            return [str];
+        }
+        
+        // 标注单个点（只标注一次）
+        function labelPoint(point) {
+            if (!point || !point.name || labeledPoints.has(point.name)) return;
+            
+            ctx.save();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#333';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(point.name, point.x + 5, point.y - 5);
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            labeledPoints.add(point.name);
+        }
+
+        // 绘制矩形
+        function drawRectangle(points, color, fill = false) {
+            if (points.length < 4) return;
+            
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.closePath();
+            
+            if (fill) {
+                ctx.globalAlpha = defaultAlpha;
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注点
+            points.forEach(p => labelPoint(p));
+        }
+
+        // 绘制直线
+        function drawLine(points, color) {
+            if (points.length < 2) return;
+            
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注点
+            points.forEach(p => labelPoint(p));
+        }
+
+        // 绘制圆
+        function drawCircle(center, radius, color, fill = false) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+            
+            if (fill) {
+                ctx.globalAlpha = defaultAlpha;
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注圆心
+            labelPoint(center);
+        }
+
+        // 绘制点
+        function drawPoint(point, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            // 标注点
+            labelPoint(point);
+        }
+
+        // 绘制网格
+        function drawGrid() {
+            const gridSize = 5; // 网格间距5像素
+            ctx.strokeStyle = '#cccccc';
+            ctx.lineWidth = 1;
+            
+            // 垂直线（+0.5像素偏移避免模糊）
+            for (let x = 0; x <= canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x + 0.5, 0);
+                ctx.lineTo(x + 0.5, canvas.height);
+                ctx.stroke();
+            }
+            
+            // 水平线（+0.5像素偏移避免模糊）
+            for (let y = 0; y <= canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y + 0.5);
+                ctx.lineTo(canvas.width, y + 0.5);
+                ctx.stroke();
+            }
+        }
+
+        // 数学坐标系与Canvas坐标系转换
+        const mathCenterX = baseWidth / 2;
+        const mathCenterY = baseHeight / 2;
+        const mathScale = 40; // 1单位 = 40像素
+
+        // 数学坐标转Canvas坐标
+        function mathToCanvas(x, y) {
+            return {
+                x: mathCenterX + x * mathScale,
+                y: mathCenterY - y * mathScale
+            };
+        }
+
+        // 绘制三角形
+        function drawTriangle(points, color, fill = false) {
+            if (points.length < 3) return;
+            
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.closePath();
+            
+            if (fill) {
+                ctx.globalAlpha = defaultAlpha;
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注点
+            points.forEach(p => labelPoint(p));
+        }
+
+        // 自动生成三角形的三个点
+        function autoTriangle(pointNames) {
+            const size = autoSize;
+            const positions = [
+                { x: centerX, y: centerY - size },
+                { x: centerX - size, y: centerY + size * 0.7 },
+                { x: centerX + size, y: centerY + size * 0.7 }
+            ];
+            const result = [];
+            pointNames.forEach((name, i) => {
+                const pos = positions[i % positions.length];
+                const point = { name: name, x: pos.x, y: pos.y };
+                points[name] = point;
+                result.push(point);
+            });
+            return result;
+        }
+
+        // 绘制数学坐标系
+        function drawMathAxis(color) {
+            ctx.save();
+            ctx.strokeStyle = color || '#666';
+            ctx.lineWidth = 1.5;
+            
+            // X轴
+            ctx.beginPath();
+            ctx.moveTo(0, mathCenterY);
+            ctx.lineTo(canvas.width, mathCenterY);
+            ctx.stroke();
+            
+            // Y轴
+            ctx.beginPath();
+            ctx.moveTo(mathCenterX, 0);
+            ctx.lineTo(mathCenterX, canvas.height);
+            ctx.stroke();
+            
+            // X轴箭头
+            ctx.beginPath();
+            ctx.moveTo(canvas.width - 10, mathCenterY - 5);
+            ctx.lineTo(canvas.width, mathCenterY);
+            ctx.lineTo(canvas.width - 10, mathCenterY + 5);
+            ctx.stroke();
+            
+            // Y轴箭头
+            ctx.beginPath();
+            ctx.moveTo(mathCenterX - 5, 10);
+            ctx.lineTo(mathCenterX, 0);
+            ctx.lineTo(mathCenterX + 5, 10);
+            ctx.stroke();
+            
+            // 标注
+            ctx.fillStyle = color || '#666';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('X', canvas.width - 20, mathCenterY - 10);
+            ctx.fillText('Y', mathCenterX + 10, 20);
+            ctx.fillText('O', mathCenterX + 5, mathCenterY + 15);
+            
+            // 刻度
+            ctx.lineWidth = 1;
+            for (let i = -10; i <= 10; i++) {
+                if (i === 0) continue;
+                const pos = mathToCanvas(i, 0);
+                
+                // X轴刻度
+                ctx.beginPath();
+                ctx.moveTo(pos.x, mathCenterY - 5);
+                ctx.lineTo(pos.x, mathCenterY + 5);
+                ctx.stroke();
+                ctx.fillText(i.toString(), pos.x - 5, mathCenterY + 20);
+                
+                // Y轴刻度
+                const posY = mathToCanvas(0, i);
+                ctx.beginPath();
+                ctx.moveTo(mathCenterX - 5, posY.y);
+                ctx.lineTo(mathCenterX + 5, posY.y);
+                ctx.stroke();
+                ctx.fillText(i.toString(), mathCenterX + 10, posY.y + 4);
+            }
+            
+            ctx.restore();
+        }
+
+        // 绘制正比例函数 y = kx
+        function drawLinear(k, color) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            let started = false;
+            for (let canvasX = 0; canvasX <= canvas.width; canvasX += 2) {
+                const mathX = (canvasX - mathCenterX) / mathScale;
+                const mathY = k * mathX;
+                const canvasY = mathCenterY - mathY * mathScale;
+                
+                if (canvasY >= 0 && canvasY <= canvas.height) {
+                    if (!started) {
+                        ctx.moveTo(canvasX, canvasY);
+                        started = true;
+                    } else {
+                        ctx.lineTo(canvasX, canvasY);
+                    }
+                }
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注函数式
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.font = '14px sans-serif';
+            const labelPos = mathToCanvas(5, k * 5 + 1);
+            ctx.fillText(`y = ${k}x`, labelPos.x, labelPos.y);
+            ctx.restore();
+        }
+
+        // 绘制反比例函数 y = k/x
+        function drawInverse(k, color) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            // 右支 (x > 0)
+            ctx.beginPath();
+            let started = false;
+            for (let canvasX = mathCenterX + 5; canvasX <= canvas.width; canvasX += 2) {
+                const mathX = (canvasX - mathCenterX) / mathScale;
+                if (Math.abs(mathX) < 0.1) continue;
+                const mathY = k / mathX;
+                const canvasY = mathCenterY - mathY * mathScale;
+                
+                if (canvasY >= 0 && canvasY <= canvas.height) {
+                    if (!started) {
+                        ctx.moveTo(canvasX, canvasY);
+                        started = true;
+                    } else {
+                        ctx.lineTo(canvasX, canvasY);
+                    }
+                }
+            }
+            ctx.stroke();
+            
+            // 左支 (x < 0)
+            ctx.beginPath();
+            started = false;
+            for (let canvasX = mathCenterX - 5; canvasX >= 0; canvasX -= 2) {
+                const mathX = (canvasX - mathCenterX) / mathScale;
+                if (Math.abs(mathX) < 0.1) continue;
+                const mathY = k / mathX;
+                const canvasY = mathCenterY - mathY * mathScale;
+                
+                if (canvasY >= 0 && canvasY <= canvas.height) {
+                    if (!started) {
+                        ctx.moveTo(canvasX, canvasY);
+                        started = true;
+                    } else {
+                        ctx.lineTo(canvasX, canvasY);
+                    }
+                }
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注函数式
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.font = '14px sans-serif';
+            const labelPos = mathToCanvas(5, k / 5 + 1);
+            ctx.fillText(`y = ${k}/x`, labelPos.x, labelPos.y);
+            ctx.restore();
+        }
+
+        // 绘制一元二次函数 y = ax² + bx + c
+        function drawQuadratic(a, b, c, color) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            let started = false;
+            for (let canvasX = 0; canvasX <= canvas.width; canvasX += 2) {
+                const mathX = (canvasX - mathCenterX) / mathScale;
+                const mathY = a * mathX * mathX + b * mathX + c;
+                const canvasY = mathCenterY - mathY * mathScale;
+                
+                if (canvasY >= 0 && canvasY <= canvas.height) {
+                    if (!started) {
+                        ctx.moveTo(canvasX, canvasY);
+                        started = true;
+                    } else {
+                        ctx.lineTo(canvasX, canvasY);
+                    }
+                }
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            // 标注函数式
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.font = '14px sans-serif';
+            const vertexX = -b / (2 * a);
+            const vertexY = a * vertexX * vertexX + b * vertexX + c;
+            const labelPos = mathToCanvas(vertexX + 3, vertexY + 2);
+            let formula = 'y = ';
+            if (a !== 0) {
+                if (a === 1) formula += 'x²';
+                else if (a === -1) formula += '-x²';
+                else formula += `${a}x²`;
+            }
+            if (b > 0) formula += ` + ${b}x`;
+            else if (b < 0) formula += ` - ${Math.abs(b)}x`;
+            if (c > 0) formula += ` + ${c}`;
+            else if (c < 0) formula += ` - ${Math.abs(c)}`;
+            ctx.fillText(formula, labelPos.x, labelPos.y);
+            ctx.restore();
+        }
+
+        // 清空画布
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 清空已保存的点
+            for (let key in points) {
+                delete points[key];
+            }
+            // 清空已标注的点记录
+            labeledPoints.clear();
+            // 重新画网格
+            drawGrid();
+        }
+
+        // 计算并保存相对位置点
+        function createRelativePoint(type, p1, p2, newName, ratio = 0.5) {
+            if (!p1 || !p2 || !newName) return null;
+            
+            let x, y;
+            if (type === '中点' || type === 'middle') {
+                x = (p1.x + p2.x) / 2;
+                y = (p1.y + p2.y) / 2;
+            } else if (type === '分点' || type === 'ratio') {
+                x = p1.x + (p2.x - p1.x) * ratio;
+                y = p1.y + (p2.y - p1.y) * ratio;
+            }
+            
+            const newPoint = { name: newName, x: x, y: y };
+            points[newName] = newPoint;
+            return newPoint;
+        }
+
+        // 解析并执行命令
+        function executeCommand(cmd, skipHistory = false) {
+            cmd = cmd.trim();
+            if (!cmd) return;
+            
+            // 保存到历史（除非跳过）
+            if (!skipHistory) {
+                // 如果是清空命令，清空历史
+                if (cmd === '清空' || cmd === '清除') {
+                    commandHistory.length = 0;
+                } else {
+                    commandHistory.push(cmd);
+                }
+            }
+            
+            // 智能解析：处理"矩形abcd"这种连写的情况
+            let type = '';
+            let remaining = '';
+            
+            const typeKeywords = ['矩形', '长方形', '直线', '线段', '圆', '点', '中点', '分点', '三角形', '坐标系', '正比例', '反比例', '二次函数', '清空', '清除'];
+            for (const keyword of typeKeywords) {
+                if (cmd.startsWith(keyword)) {
+                    type = keyword;
+                    remaining = cmd.substring(keyword.length).trim();
+                    break;
+                }
+            }
+            
+            // 如果没有匹配到关键词，使用原来的空格分割方式
+            let parts;
+            if (!type) {
+                parts = cmd.split(/\s+/);
+                type = parts[0];
+                remaining = parts.slice(1).join(' ');
+            }
+            
+            // 重新构建parts数组
+            parts = [type];
+            if (remaining) {
+                // 将remaining按空格分割，但保留可能的颜色词
+                const remainingParts = remaining.split(/\s+/);
+                parts = parts.concat(remainingParts);
+            }
+            
+            const colorResult = parseColor(parts);
+            const color = colorResult.color;
+            
+            // 检查是否需要填充
+            const needsFill = parts.some(p => p === '填充' || p === 'fill');
+
+            if (type === '矩形' || type === '长方形') {
+                const pointArgs = [];
+                for (let i = 1; i &lt; parts.length; i++) {
+                    if (i === colorResult.index) continue;
+                    if (parts[i] === '填充' || parts[i] === 'fill') continue;
+                    pointArgs.push(parts[i]);
+                }
+                
+                // 检查是否需要自动布局
+                const hasCoordinates = pointArgs.some(p =&gt; p.includes('(') &amp;&amp; p.includes(')'));
+                
+                if (!hasCoordinates) {
+                    // 自动布局模式
+                    let allPointNames = [];
+                    pointArgs.forEach(arg =&gt; {
+                        allPointNames = allPointNames.concat(extractPointNames(arg));
+                    });
+                    // 如果没有提供点名称，自动分配4个
+                    if (allPointNames.length === 0) {
+                        allPointNames = getNextAvailableLetters(4);
+                    }
+                    // 如果不够4个点，补充默认名称
+                    while (allPointNames.length &lt; 4) {
+                        allPointNames.push(String.fromCharCode(65 + allPointNames.length));
+                    }
+                    const rectPoints = autoRectangle(allPointNames);
+                    drawRectangle(rectPoints, color, needsFill);
+                } else {
+                    // 原有坐标模式
+                    const rectPoints = [];
+                    pointArgs.forEach(p =&gt; {
+                        const parsed = parsePoint(p);
+                        if (parsed) rectPoints.push(parsed);
+                    });
+                    drawRectangle(rectPoints, color, needsFill);
+                }
+            }
+            else if (type === '直线' || type === '线段') {
+                const pointArgs = [];
+                for (let i = 1; i &lt; parts.length; i++) {
+                    if (i === colorResult.index) continue;
+                    pointArgs.push(parts[i]);
+                }
+                
+                // 检查是否需要自动布局
+                const hasCoordinates = pointArgs.some(p =&gt; p.includes('(') &amp;&amp; p.includes(')'));
+                const hasExistingPoints = pointArgs.some(p =&gt; points[p]);
+                
+                if (!hasCoordinates) {
+                    // 自动布局模式
+                    let allPointNames = [];
+                    pointArgs.forEach(arg =&gt; {
+                        allPointNames = allPointNames.concat(extractPointNames(arg));
+                    });
+                    // 如果没有提供点名称，自动分配2个
+                    if (allPointNames.length === 0) {
+                        allPointNames = getNextAvailableLetters(2);
+                    }
+                    const linePoints = autoLine(allPointNames);
+                    drawLine(linePoints, color);
+                } else {
+                    // 原有模式
+                    const linePoints = [];
+                    pointArgs.forEach(p =&gt; {
+                        const parsed = parsePoint(p);
+                        if (parsed) linePoints.push(parsed);
+                    });
+                    drawLine(linePoints, color);
+                }
+            }
+            else if (type === '圆') {
+                let center = null;
+                let radius = 0;
+                let centerName = null;
+                
+                for (let i = 1; i &lt; parts.length; i++) {
+                    if (i === colorResult.index) continue;
+                    if (parts[i] === '填充' || parts[i] === 'fill') continue;
+                    const p = parsePoint(parts[i]);
+                    if (p) {
+                        center = p;
+                    } else if (!isNaN(parseInt(parts[i]))) {
+                        radius = parseInt(parts[i]);
+                    } else if (isPurePointName(parts[i])) {
+                        centerName = parts[i];
+                    }
+                }
+                
+                if (center &amp;&amp; radius &gt; 0) {
+                    drawCircle(center, radius, color, needsFill);
+                } else {
+                    // 自动布局模式
+                    if (!centerName) {
+                        centerName = getNextAvailableLetter(14); // 从O开始（第15个字母，索引14）
+                    }
+                    const autoResult = autoCircle(centerName);
+                    drawCircle(autoResult.center, autoResult.radius, color, needsFill);
+                }
+            }
+            else if (type === "点") {
+                const pointArgs = [];
+                for (let i = 1; i < parts.length; i++) {
+                    if (i === colorResult.index) continue;
+                    pointArgs.push(parts[i]);
+                }
+                
+                let pointIndex = 0;
+                pointArgs.forEach(arg => {
+                    const names = extractPointNames(arg);
+                    names.forEach(name => {
+                        const existing = points[name];
+                        if (existing) {
+                            drawPoint(existing, color);
+                        } else if (isPurePointName(name)) {
+                            const p = autoPoint(name, pointIndex);
+                            drawPoint(p, color);
+                            pointIndex++;
+                        } else {
+                            const p = parsePoint(name);
+                            if (p) {
+                                drawPoint(p, color);
+                                pointIndex++;
+                            }
+                        }
+                    });
+                });
+            }
+            else if (type === '中点') {
+                // 格式：中点 A B M
+                const p1 = parsePoint(parts[1]);
+                const p2 = parsePoint(parts[2]);
+                const newName = parts[3];
+                const newPoint = createRelativePoint('中点', p1, p2, newName);
+                if (newPoint) {
+                    drawPoint(newPoint, color);
+                }
+            }
+            else if (type === '分点') {
+                // 格式：分点 A B M 1/3  或 分点 A B M 0.333
+                const p1 = parsePoint(parts[1]);
+                const p2 = parsePoint(parts[2]);
+                const newName = parts[3];
+                let ratio = 0.5;
+                
+                if (parts[4]) {
+                    const ratioStr = parts[4];
+                    if (ratioStr.includes('/')) {
+                        const [num, den] = ratioStr.split('/').map(Number);
+                        ratio = num / den;
+                    } else {
+                        ratio = parseFloat(ratioStr);
+                    }
+                }
+                
+                const newPoint = createRelativePoint('分点', p1, p2, newName, ratio);
+                if (newPoint) {
+                    drawPoint(newPoint, color);
+                }
+            }
+            else if (type === '三角形') {
+                const pointArgs = [];
+                for (let i = 1; i < parts.length; i++) {
+                    if (i === colorResult.index) continue;
+                    if (parts[i] === '填充' || parts[i] === 'fill') continue;
+                    pointArgs.push(parts[i]);
+                }
+                
+                const hasCoordinates = pointArgs.some(p => p.includes('(') && p.includes(')'));
+                
+                if (!hasCoordinates && pointArgs.length > 0) {
+                    let allPointNames = [];
+                    pointArgs.forEach(arg => {
+                        allPointNames = allPointNames.concat(extractPointNames(arg));
+                    });
+                    while (allPointNames.length < 3) {
+                        allPointNames.push(String.fromCharCode(65 + allPointNames.length));
+                    }
+                    const triPoints = autoTriangle(allPointNames);
+                    drawTriangle(triPoints, color, needsFill);
+                } else {
+                    const triPoints = [];
+                    pointArgs.forEach(p => {
+                        const parsed = parsePoint(p);
+                        if (parsed) triPoints.push(parsed);
+                    });
+                    drawTriangle(triPoints, color, needsFill);
+                }
+            }
+            else if (type === '坐标系') {
+                let axisColor = null;
+                for (let i = 1; i < parts.length; i++) {
+                    if (colorMap[parts[i]]) {
+                        axisColor = colorMap[parts[i]];
+                    }
+                }
+                drawMathAxis(axisColor);
+            }
+            else if (type === '正比例') {
+                let k = 1;
+                let funcColor = color;
+                for (let i = 1; i < parts.length; i++) {
+                    if (colorMap[parts[i]]) {
+                        funcColor = colorMap[parts[i]];
+                    } else if (!isNaN(parseFloat(parts[i]))) {
+                        k = parseFloat(parts[i]);
+                    }
+                }
+                drawLinear(k, funcColor);
+            }
+            else if (type === '反比例') {
+                let k = 1;
+                let funcColor = color;
+                for (let i = 1; i < parts.length; i++) {
+                    if (colorMap[parts[i]]) {
+                        funcColor = colorMap[parts[i]];
+                    } else if (!isNaN(parseFloat(parts[i]))) {
+                        k = parseFloat(parts[i]);
+                    }
+                }
+                drawInverse(k, funcColor);
+            }
+            else if (type === '二次函数') {
+                let a = 1, b = 0, c = 0;
+                let funcColor = color;
+                let paramIndex = 0;
+                for (let i = 1; i < parts.length; i++) {
+                    if (colorMap[parts[i]]) {
+                        funcColor = colorMap[parts[i]];
+                    } else if (!isNaN(parseFloat(parts[i]))) {
+                        if (paramIndex === 0) a = parseFloat(parts[i]);
+                        else if (paramIndex === 1) b = parseFloat(parts[i]);
+                        else if (paramIndex === 2) c = parseFloat(parts[i]);
+                        paramIndex++;
+                    }
+                }
+                drawQuadratic(a, b, c, funcColor);
+            }
+            else if (type === '清空' || type === '清除') {
+                clearCanvas();
+            }
+        }
+
+        // 监听回车键
+        commandInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                executeCommand(commandInput.value);
+                commandInput.value = '';
+            }
+        });
+        
+        // 缩放按钮事件
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            currentZoom = Math.min(currentZoom + zoomStep, maxZoom);
+            applyZoom();
+        });
+        
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            currentZoom = Math.max(currentZoom - zoomStep, minZoom);
+            applyZoom();
+        });
+        
+        document.getElementById('zoomReset').addEventListener('click', () => {
+            currentZoom = 1;
+            applyZoom();
+        });
+        
+        // 初始画网格
+        drawGrid();
+        // 初始应用缩放
+        applyZoom();
+    </script>
+</body>
+</html>
