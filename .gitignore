@@ -1,0 +1,23 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 备份文件
+*.backup
+*.old
+*.fixed
+*.final
+
+# 测试图片
+test-*.png
+
+# Node.js（如果将来添加）
+node_modules/
+package-lock.json
