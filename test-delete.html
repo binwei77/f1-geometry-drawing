@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1几何绘图 - 删除功能测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 100%;
+            padding: 10px;
+        }
+        h1 {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        #inputArea {
+            margin: 10px 0;
+        }
+        #commandInput {
+            width: 100%;
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #autocomplete {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        .autocomplete-item {
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+        .autocomplete-item:hover {
+            background-color: #f0f0f0;
+        }
+        #output {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 100px;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+        #canvasContainer {
+            margin: 10px 0;
+            position: relative;
+            background: white;
+        }
+        canvas {
+            border: 1px solid #ddd;
+            display: block;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 8px 12px;
+            font-size: 14px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #zoomLevel {
+            font-size: 14px;
+            margin: 0 10px;
+        }
+        .test-commands {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e8f4f8;
+            border-radius: 4px;
+        }
+        .test-commands h2 {
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .test-btn {
+            background: #2196F3;
+            font-size: 12px;
+            padding: 5px 8px;
+        }
+        .test-btn:hover {
+            background: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>F1几何绘图 - 删除功能测试</h1>
+        
+        <div id="inputArea">
+            <input type="text" id="commandInput" placeholder="输入命令（如：矩形abcd）" autocomplete="off">
+            <div id="autocomplete"></div>
+        </div>
+        
+        <div class="buttons">
+            <button onclick="executeCurrentCommand()">执行</button>
+            <button onclick="undo()">撤销</button>
+            <button onclick="redo()">重做</button>
+            <button onclick="clearCanvas()">清空</button>
+            <span id="zoomLevel">缩放: 100%</span>
+        </div>
+        
+        <div id="output"></div>
+        
+        <div id="canvasContainer">
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div class="test-commands">
+            <h2>测试命令：</h2>
+            <button class="test-btn" onclick="runTest('矩形abcd')">1. 矩形abcd</button>
+            <button class="test-btn" onclick="runTest('三角形aef')">2. 三角形aef</button>
+            <button class="test-btn" onclick="runTest('圆O 50')">3. 圆O 50</button>
+            <button class="test-btn" onclick="runTest('列表')">4. 列列表</button>
+            <button class="test-btn" onclick="runTest('删除 矩形')">5. 删除矩形</button>
+            <button class="test-btn" onclick="runTest('删除 a')">6. 删除点a</button>
+            <button class="test-btn" onclick="runTest('删除最新的')">7. 删除最新的</button>
+            <button class="test-btn" onclick="runTest('撤销')">8. 撤销</button>
+            <button class="test-btn" onclick="runTest('重做')">9. 重做</button>
+        </div>
+    </div>
+    
+    <script src="js/points.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/functions.js"></script>
+    <script src="js/shapes.js"></script>
+    <script src="js/commands.js"></script>
+    <script>
+        // 执行当前输入的命令
+        function executeCurrentCommand() {
+            const input = document.getElementById('commandInput');
+            const command = input.value.trim();
+            if (command) {
+                executeCommand(command);
+                input.value = '';
+            }
+        }
+        
+        // 运行测试命令
+        function runTest(command) {
+            document.getElementById('commandInput').value = command;
+            executeCurrentCommand();
+        }
+        
+        // 绑定Enter键
+        document.getElementById('commandInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                executeCurrentCommand();
+            }
+        });
+        
+        // 初始化
+        window.onload = function() {
+            initCanvas();
+            drawGrid();
+        };
+        window.onresize = function() {
+            initCanvas();
+            drawGrid();
+        };
+    </script>
+</body>
+</html>

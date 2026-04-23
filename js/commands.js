@@ -18,6 +18,161 @@ let globalColor = '#333333';  // 默认黑色
 // 存储已绘制的函数信息
 const functions = {};
 
+// 图形列表，用于删除功能（单一数据源）
+const shapeList = [];
+window.shapeList = shapeList;
+
+/**
+ * 添加图形到列表
+ * @param {string} type - 图形类型
+ * @param {string} name - 图形名称
+ * @param {Array} points - 涉及的点名称数组
+ * @param {Object} data - 图形数据（坐标、颜色等）
+ * @returns {string} 图形ID
+ */
+function addShapeToList(type, name, pointNames, data) {
+    const shape = {
+        id: 'shape_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: type,
+        name: name,
+        points: pointNames,
+        data: data,
+        createdAt: Date.now()
+    };
+    shapeList.push(shape);
+    // 同步到shapes数组（shapes是shapeList的镜像）
+    if (data && data.shape) {
+        shapes.push(data.shape);
+    }
+    return shape.id;
+}
+
+/**
+ * 从列表中删除图形
+ * @param {string} shapeId - 图形ID
+ * @returns {boolean} 是否成功删除
+ */
+function removeShapeFromList(shapeId) {
+    const index = shapeList.findIndex(s => s.id === shapeId);
+    if (index !== -1) {
+        const removed = shapeList.splice(index, 1)[0];
+        // 同步从shapes数组中删除
+        if (removed && removed.data && removed.data.shape) {
+            const shapeIdx = shapes.findIndex(s => s === removed.data.shape || s.name === removed.name);
+            if (shapeIdx !== -1) {
+                shapes.splice(shapeIdx, 1);
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
+ * 按类型删除图形
+ * @param {string} type - 图形类型
+ * @returns {Array} 被删除的图形ID数组
+ */
+function removeShapesByType(type) {
+    const toRemove = shapeList.filter(s => s.type === type);
+    const ids = toRemove.map(s => s.id);
+
+    // 从列表中移除，同时从shapes数组中删除
+    for (let i = shapeList.length - 1; i >= 0; i--) {
+        if (shapeList[i].type === type) {
+            const removed = shapeList.splice(i, 1)[0];
+            // 同步从shapes数组中删除
+            if (removed && removed.data && removed.data.shape) {
+                const shapeIdx = shapes.findIndex(s => s === removed.data.shape || s.name === removed.name);
+                if (shapeIdx !== -1) {
+                    shapes.splice(shapeIdx, 1);
+                }
+            }
+        }
+    }
+
+    return ids;
+}
+
+/**
+ * 按名称删除图形
+ * @param {string} name - 图形名称
+ * @returns {Array} 被删除的图形ID数组
+ */
+function removeShapesByName(name) {
+    // 匹配函数：支持精确匹配和前缀匹配
+    function matchName(shapeEntry, name) {
+        const s = shapeEntry;
+        // 精确匹配
+        if (s.name === name) return true;
+        // 矩形前缀匹配："矩形abcd"→去掉2字, "长方形abcd"→去掉3字
+        if (s.type === 'rectangle') {
+            if (name.startsWith('矩形') && name.substring(2) === s.name) return true;
+            if (name.startsWith('长方形') && name.substring(3) === s.name) return true;
+        }
+        // 三角形前缀匹配："三角形abc"→去掉3字
+        if (s.type === 'triangle' && name.startsWith('三角形') && name.substring(3) === s.name) return true;
+        // 圆前缀匹配："圆O"→去掉1字
+        if (s.type === 'circle' && name.startsWith('圆') && name.substring(1) === s.name) return true;
+        // 直线前缀匹配："直线ab"→去掉2字
+        if (s.type === 'line' && name.startsWith('直线') && name.substring(2) === s.name) return true;
+        // 线段前缀匹配："线段ab"→去掉2字
+        if (s.type === 'segment' && name.startsWith('线段') && name.substring(2) === s.name) return true;
+        // 角前缀匹配："角abc"→去掉1字
+        if (s.type === 'angle' && name.startsWith('角') && name.substring(1) === s.name) return true;
+        // 点匹配
+        if (s.type === 'point' && name === s.name) return true;
+        // 无前缀的名称匹配（如"ab"匹配线段,"abc"匹配三角形等）
+        if (s.name === name) return true;
+        return false;
+    }
+
+    const toRemove = shapeList.filter(s => matchName(s, name));
+    const ids = toRemove.map(s => s.id);
+
+    // 从列表中移除，同时从shapes数组中删除
+    for (let i = shapeList.length - 1; i >= 0; i--) {
+        if (matchName(shapeList[i], name)) {
+            const removed = shapeList.splice(i, 1)[0];
+            // 同步从shapes数组中删除
+            if (removed && removed.data && removed.data.shape) {
+                const shapeIdx = shapes.findIndex(s => s === removed.data.shape || s.name === removed.name);
+                if (shapeIdx !== -1) {
+                    shapes.splice(shapeIdx, 1);
+                }
+            }
+        }
+    }
+
+    return ids;
+}
+
+/**
+ * 按点删除图形
+ * @param {string} pointName - 点名称
+ * @returns {Array} 被删除的图形ID数组
+ */
+function removeShapesByPoint(pointName) {
+    const toRemove = shapeList.filter(s => s.points && s.points.includes(pointName));
+    const ids = toRemove.map(s => s.id);
+
+    // 从列表中移除，同时从shapes数组中删除
+    for (let i = shapeList.length - 1; i >= 0; i--) {
+        if (shapeList[i].points && shapeList[i].points.includes(pointName)) {
+            const removed = shapeList.splice(i, 1)[0];
+            // 同步从shapes数组中删除
+            if (removed && removed.data && removed.data.shape) {
+                const shapeIdx = shapes.findIndex(s => s === removed.data.shape || s.name === removed.name);
+                if (shapeIdx !== -1) {
+                    shapes.splice(shapeIdx, 1);
+                }
+            }
+        }
+    }
+
+    return ids;
+}
+
 /**
  * 根据模式解析参数的辅助函数
  */
@@ -153,19 +308,52 @@ function smartSplitParameters(remaining, commandType) {
  * @returns {Object} 图形对象
  */
 function createShape(type, name, pointNames, color, fill = false) {
+    // 收集所有点的坐标信息
+    const pointsData = [];
+    pointNames.forEach(pName => {
+        if (points[pName]) {
+            pointsData.push({
+                name: pName,
+                x: points[pName].x,
+                y: points[pName].y
+            });
+        }
+    });
+    
     // 检查是否已存在同名图形
     const existingIndex = shapes.findIndex(s => s.name === name);
     if (existingIndex !== -1) {
         // 更新现有图形
-        shapes[existingIndex] = {
+        const shape = {
             type: type,
             name: name,
             pointNames: pointNames,
             color: color,
             fill: fill
         };
+        shapes[existingIndex] = shape;
         console.log(`已更新图形 ${name}`);
-        return shapes[existingIndex];
+        
+        // 更新shapeList中的记录
+        const shapeListIndex = shapeList.findIndex(s => s.name === name);
+        if (shapeListIndex !== -1) {
+            shapeList[shapeListIndex] = {
+                id: shapeList[shapeListIndex].id,
+                type: type,
+                name: name,
+                points: pointNames,
+                data: {
+                    shape: shape,
+                    points: pointsData,
+                    type: type,
+                    color: color,
+                    fill: fill
+                },
+                createdAt: shapeList[shapeListIndex].createdAt
+            };
+        }
+        
+        return shape;
     }
     
     // 创建新图形
@@ -176,8 +364,18 @@ function createShape(type, name, pointNames, color, fill = false) {
         color: color,
         fill: fill
     };
-    shapes.push(shape);
+    // shapes.push(shape) 已由 addShapeToList 同步
     console.log(`已创建图形 ${name} (${type})`);
+    
+    // 记录到shapeList（同时会同步到shapes数组）
+    addShapeToList(type, name, pointNames, {
+        shape: shape,
+        points: pointsData,
+        type: type,
+        color: color,
+        fill: fill
+    });
+    
     return shape;
 }
 
@@ -233,9 +431,13 @@ function executeCommand(cmd, skipHistory = false) {
                     labeledPoints.add(pointName);
                 });
                 
-                // 恢复图形对象（如果有）
+                // 恢复图形对象（如果有）— 同时恢复到shapes和shapeList
                 if (lastCmd.deletedShape) {
                     shapes.push(lastCmd.deletedShape);
+                    // 同步到shapeList（重新添加图形记录）
+                    if (lastCmd.deletedShapeListEntry) {
+                        shapeList.push(lastCmd.deletedShapeListEntry);
+                    }
                     console.log('已恢复图形对象');
                 }
                 
@@ -252,36 +454,44 @@ function executeCommand(cmd, skipHistory = false) {
                 console.log('撤销删除，已恢复对象');
             }
             // 如果撤销的是清空命令，需要恢复清空前的状态
-            else if ((cmdStr === '清空' || cmdStr === '清除') && clearedState) {
+            else if ((cmdStr === '清空' || cmdStr === '清除') && lastCmd.clearedState) {
                 // 恢复点的状态
                 Object.keys(points).forEach(key => delete points[key]);
-                Object.assign(points, clearedState.points);
-                
-                // 恢复函数的状态
-                Object.keys(functions).forEach(key => delete functions[key]);
-                Object.assign(functions, clearedState.functions);
-                
-                // 恢复全局颜色
-                globalColor = clearedState.globalColor;
+                Object.assign(points, lastCmd.clearedState.points);
                 
                 // 恢复labeledPoints
                 labeledPoints.clear();
-                clearedState.labeledPoints.forEach(pointName => {
+                lastCmd.clearedState.labeledPoints.forEach(pointName => {
                     labeledPoints.add(pointName);
                 });
                 
-                // 恢复shapes数组
+                // 恢复shapes数组和shapeList
                 shapes.length = 0;
-                if (clearedState.shapes) {
-                    clearedState.shapes.forEach(shape => {
+                shapeList.length = 0;
+                if (lastCmd.clearedState.shapes) {
+                    lastCmd.clearedState.shapes.forEach(shape => {
                         shapes.push(shape);
                     });
                 }
+                if (lastCmd.clearedState.shapeList) {
+                    lastCmd.clearedState.shapeList.forEach(entry => {
+                        shapeList.push(entry);
+                    });
+                }
                 
-                // 重绘画布
+                // 重绘画布（不重绘历史命令，因为已经恢复了清空前的状态）
                 clearCanvas(false);
+                commandHistory.forEach(c => {
+                    const cmdToExecute = typeof c === 'string' ? c : c.cmd;
+                    // 跳过清空和删除命令，避免重新执行
+                    if (!cmdToExecute.includes('删除') && !cmdToExecute.includes('remove') && 
+                        !cmdToExecute.includes('del') && !cmdToExecute.includes('清空') && 
+                        !cmdToExecute.includes('清除')) {
+                        executeCommand(cmdToExecute, true);
+                    }
+                });
                 
-                console.log('撤销清空，已恢复所有内容');
+                console.log('撤销清空，已恢复对象');
             } else {
                 // 正常撤销：：清空画布并重新执行剩余命令
                 clearCanvas();
@@ -318,7 +528,8 @@ function executeCommand(cmd, skipHistory = false) {
                     commandHistory[commandHistory.length - 1] = {
                         cmd: cmdStr,
                         deletedState: cmdToRedo.deletedState,
-                        deletedShape: cmdToRedo.deletedShape
+                        deletedShape: cmdToRedo.deletedShape,
+                        deletedShapeListEntry: cmdToRedo.deletedShapeListEntry
                     };
                 }
                 
@@ -347,29 +558,10 @@ function executeCommand(cmd, skipHistory = false) {
         return;
     }
     
-    // 保存到历史（除非跳过）
-    if (!skipHistory) {
-        // 如果是清空命令，先保存当前状态
-        if (cmd === '清空' || cmd === '清除') {
-            // 深拷贝保存当前状态
-            clearedState = {
-                points: JSON.parse(JSON.stringify(points)),
-                functions: JSON.parse(JSON.stringify(functions)),
-                globalColor: globalColor,
-                commandHistory: [...commandHistory],
-                labeledPoints: Array.from(labeledPoints),  // 将Set转换为数组保存
-                shapes: JSON.parse(JSON.stringify(shapes))  // 保存shapes数组
-            };
-            
-            // 清空重做栈（新操作时清空）
-            redoStack.length = 0;
-            // 将清空命令加入历史
-            commandHistory.push(cmd);
-        } else {
-            // 新操作时清空重做栈
-            redoStack.length = 0;
-            commandHistory.push(cmd);
-        }
+    // 处理列表命令
+    if (cmd === '列表' || cmd === 'list') {
+        showShapeList();
+        return;
     }
     
     // 智能解析：处理"矩形abcd"这种连写的情况
@@ -401,6 +593,37 @@ function executeCommand(cmd, skipHistory = false) {
         parts = parts.concat(remainingParts);
     }
     
+    // 处理删除命令
+    if (type === '删除' || type === 'remove' || type === 'del') {
+        handleDeleteCommand(cmd, parts);
+        return;
+    }
+    
+    // 保存到历史（除非跳过）
+    if (!skipHistory) {
+        // 如果是清空命令，先保存当前状态
+        if (cmd === '清空' || cmd === '清除') {
+            // 深拷贝保存当前状态
+            clearedState = {
+                points: JSON.parse(JSON.stringify(points)),
+                functions: JSON.parse(JSON.stringify(functions)),
+                globalColor: globalColor,
+                commandHistory: [...commandHistory],
+                labeledPoints: Array.from(labeledPoints),  // 将Set转换为数组保存
+                shapes: JSON.parse(JSON.stringify(shapes))  // 保存shapes数组
+            };
+            
+            // 清空重做栈（新操作时清空）
+            redoStack.length = 0;
+            // 将清空命令加入历史
+            commandHistory.push(cmd);
+        } else {
+            // 新操作时清空重做栈
+            redoStack.length = 0;
+            commandHistory.push(cmd);
+        }
+    }
+    
     const colorResult = parseColor(parts);
     const color = colorResult.index !== -1 ? colorResult.color : globalColor;
     
@@ -427,40 +650,56 @@ function executeCommand(cmd, skipHistory = false) {
             pointArgs.push(parts[i]);
         }
         
-        // 检查是否需要自动布局
+        // 提取点名称
+        let allPointNames = [];
+        pointArgs.forEach(arg => {
+            allPointNames = allPointNames.concat(extractPointNames(arg));
+        });
+        
+        // 检查是否有坐标
         const hasCoordinates = pointArgs.some(p => p.includes('(') && p.includes(')'));
         
-        if (!hasCoordinates) {
-            // 自动布局模式
-            let allPointNames = [];
-            pointArgs.forEach(arg => {
-                allPointNames = allPointNames.concat(extractPointNames(arg));
-            });
-            // 如果没有提供点名称，自动分配4个
-            if (allPointNames.length === 0) {
-                allPointNames = getNextAvailableLetters(4);
-            }
-            // 如果不够4个点，补充默认名称
-            while (allPointNames.length < 4) {
-                allPointNames.push(String.fromCharCode(65 + allPointNames.length));
-            }
-            const rectPoints = autoRectangle(allPointNames);
+        // 如果既没有点名称也没有坐标，提示用户
+        if (allPointNames.length === 0 && !hasCoordinates) {
+            console.log('请输入4个点的名称，如：矩形abcd');
+            return;
+        }
+        
+        // 检查所有点是否都已存在
+        const allPointsExist = allPointNames.length === 4 && 
+                               allPointNames.every(name => points[name]);
+        
+        if (allPointsExist) {
+            // 使用已存在的点绘制矩形
+            const rectPoints = allPointNames.map(name => points[name]);
             drawRectangle(rectPoints, color, needsFill);
             // 创建图形对象
             createShape('rectangle', allPointNames.join(''), allPointNames, color, needsFill);
-        } else {
+        } else if (hasCoordinates) {
             // 原有坐标模式
             const rectPoints = [];
             pointArgs.forEach(p => {
                 const parsed = parsePoint(p);
                 if (parsed) rectPoints.push(parsed);
             });
-            drawRectangle(rectPoints, color, needsFill);
-            // 创建图形对象（使用所有点的名称）
-            const pointNames = rectPoints.map(p => p.name).filter(n => n);
-            if (pointNames.length === 4) {
-                createShape('rectangle', pointNames.join(''), pointNames, color, needsFill);
+            if (rectPoints.length === 4) {
+                drawRectangle(rectPoints, color, needsFill);
+                // 创建图形对象（使用所有点的名称）
+                const pointNames = rectPoints.map(p => p.name).filter(n => n);
+                if (pointNames.length === 4) {
+                    createShape('rectangle', pointNames.join(''), pointNames, color, needsFill);
+                }
+            } else {
+                console.log('请提供4个点的坐标，如：矩形 A(100,200) B(200,200) C(200,300) D(100,300)');
             }
+        } else if (allPointNames.length === 4) {
+            // 提供了点名称但点不存在，自动生成这些点
+            const rectPoints = autoRectangle(allPointNames);
+            drawRectangle(rectPoints, color, needsFill);
+            // 创建图形对象
+            createShape('rectangle', allPointNames.join(''), allPointNames, color, needsFill);
+        } else {
+            console.log('请输入4个点的名称，如：矩形abcd');
         }
     }
     else if (type === '直线' || type === '线段') {
@@ -470,26 +709,33 @@ function executeCommand(cmd, skipHistory = false) {
             pointArgs.push(parts[i]);
         }
         
-        // 检查是否需要自动布局
-        const hasCoordinates = pointArgs.some(p => p.includes('(') && p.includes(')'));
-        const hasExistingPoints = pointArgs.some(p => points[p]);
+        // 提取点名称
+        let allPointNames = [];
+        pointArgs.forEach(arg => {
+            allPointNames = allPointNames.concat(extractPointNames(arg));
+        });
         
-        if (!hasCoordinates && !hasExistingPoints) {
-            // 自动布局模式（既没有坐标也没有已存在的点）
-            let allPointNames = [];
-            pointArgs.forEach(arg => {
-                allPointNames = allPointNames.concat(extractPointNames(arg));
-            });
-            // 如果没有提供点名称，自动分配2个
-            if (allPointNames.length === 0) {
-                allPointNames = getNextAvailableLetters(2);
-            }
-            const linePoints = autoLine(allPointNames);
+        // 检查是否有坐标
+        const hasCoordinates = pointArgs.some(p => p.includes('(') && p.includes(')'));
+        
+        // 如果既没有点名称也没有坐标，提示用户
+        if (allPointNames.length === 0 && !hasCoordinates) {
+            console.log('请输入2个点的名称，如：线段ab');
+            return;
+        }
+        
+        // 检查所有点是否都已存在
+        const allPointsExist = allPointNames.length === 2 && 
+                               allPointNames.every(name => points[name]);
+        
+        if (allPointsExist) {
+            // 使用已存在的点绘制线段
+            const linePoints = allPointNames.map(name => points[name]);
             drawLine(linePoints, color);
             // 创建图形对象
             createShape(type === '线段' ? 'segment' : 'line', allPointNames.join(''), allPointNames, color);
-        } else {
-            // 使用已存在的点或坐标
+        } else if (hasCoordinates) {
+            // 使用坐标坐标模式
             const linePoints = [];
             const pointNames = [];
             pointArgs.forEach(p => {
@@ -499,11 +745,23 @@ function executeCommand(cmd, skipHistory = false) {
                     if (parsed.name) pointNames.push(parsed.name);
                 }
             });
+            if (linePoints.length >= 2) {
+                drawLine(linePoints, color);
+                // 创建图形对象
+                if (pointNames.length >= 2) {
+                    createShape(type === '线段' ? 'segment' : 'line', pointNames.join(''), pointNames, color);
+                }
+            } else {
+                console.log('请提供至少2个点的坐标');
+            }
+        } else if (allPointNames.length === 2) {
+            // 提供了点名称但点不存在，自动生成这些点
+            const linePoints = autoLine(allPointNames);
             drawLine(linePoints, color);
             // 创建图形对象
-            if (pointNames.length >= 2) {
-                createShape(type === '线段' ? 'segment' : 'line', pointNames.join(''), pointNames, color);
-            }
+            createShape(type === '线段' ? 'segment' : 'line', allPointNames.join(''), allPointNames, color);
+        } else {
+            console.log('请输入2个点的名称，如：线段ab');
         }
     }
     else if (type === '角') {
@@ -513,28 +771,49 @@ function executeCommand(cmd, skipHistory = false) {
             pointArgs.push(parts[i]);
         }
         
+        // 提取点名称
+        let allPointNames = [];
+        pointArgs.forEach(arg => {
+            allPointNames = allPointNames.concat(extractPointNames(arg));
+        });
+        
+        // 检查是否有坐标
         const hasCoordinates = pointArgs.some(p => p.includes('(') && p.includes(')'));
         
-        if (hasCoordinates) {
-            const p1 = parsePoint(pointArgs[0]);
-            const p2 = parsePoint(pointArgs[1]);
-            const p3 = parsePoint(pointArgs[2]);
-            if (p1 && p2 && p3) {
-                drawAngle(p1, p2, p3, color);
+        // 如果既没有点名称也没有坐标，提示用户
+        if (allPointNames.length === 0 && !hasCoordinates) {
+            console.log('请输入3个点的名称，如：角abc');
+            return;
+        }
+        
+        // 检查所有点是否都已存在
+        const allPointsExist = allPointNames.length === 3 && 
+                               allPointNames.every(name => points[name]);
+        
+        if (allPointsExist) {
+            // 使用已存在的点绘制角
+            const anglePoints = allPointNames.map(name => points[name]);
+            drawAngle(anglePoints[0], anglePoints[1], anglePoints[2], color);
+        } else if (hasCoordinates) {
+            // 使用坐标绘制角
+            if (pointArgs.length >= 3) {
+                const p1 = parsePoint(pointArgs[0]);
+                const p2 = parsePoint(pointArgs[1]);
+                const p3 = parsePoint(pointArgs[2]);
+                if (p1 && p2 && p3) {
+                    drawAngle(p1, p2, p3, color);
+                } else {
+                    console.log('请提供3个有效的点的坐标');
+                }
+            } else {
+                console.log('请提供3个点的坐标，如：角 A(100,200) B(150,250) C(200,200)');
             }
-        } else {
-            let allPointNames = [];
-            pointArgs.forEach(arg => {
-                allPointNames = allPointNames.concat(extractPointNames(arg));
-            });
-            if (allPointNames.length === 0) {
-                allPointNames = getNextAvailableLetters(3);
-            }
-            while (allPointNames.length < 3) {
-                allPointNames.push(String.fromCharCode(65 + allPointNames.length));
-            }
+        } else if (allPointNames.length === 3) {
+            // 提供了点名称但点不存在，自动生成这些点
             const anglePoints = autoAngle(allPointNames);
             drawAngle(anglePoints[0], anglePoints[1], anglePoints[2], color);
+        } else {
+            console.log('请输入3个点的名称，如：角abc');
         }
     }
     else if (type === '圆') {
@@ -543,11 +822,14 @@ function executeCommand(cmd, skipHistory = false) {
         let centerName = null;
         let segmentName = null;  // 用于存储线段名称
         
+        console.log('[DEBUG圆] parts=' + JSON.stringify(parts) + ', colorResult.index=' + colorResult.index);
+        
         for (let i = 1; i < parts.length; i++) {
             if (i === colorResult.index) continue;
             if (parts[i] === '填充' || parts[i] === 'fill') continue;
             
             const p = parsePoint(parts[i]);
+            console.log('[DEBUG圆] i=' + i + ' part="' + parts[i] + '" parsePoint=' + JSON.stringify(p) + ' isSegmentName=' + isSegmentName(parts[i]) + ' isNaN=' + isNaN(parseInt(parts[i])) + ' isPurePointName=' + isPurePointName(parts[i]));
             if (p) {
                 center = p;
             } else if (isSegmentName(parts[i])) {
@@ -560,32 +842,49 @@ function executeCommand(cmd, skipHistory = false) {
             }
         }
         
+        console.log('[DEBUG圆] center=' + JSON.stringify(center) + ' radius=' + radius + ' centerName=' + centerName + ' segmentName=' + segmentName);
+        
+        // 检查是否提供了圆心或线段
+        if (!center && !centerName && !segmentName) {
+            console.log('请输入圆心点和半径，或使用线段作为半径，如：圆 O r 或 圆 O CD');
+            return;
+        }
+        
         // 如果有线段名称，计算线段长度作为半径
         if (segmentName) {
             radius = calculateSegmentLength(segmentName);
+            if (radius === 0) {
+                console.log(`线段 ${segmentName} 不存在或长度为0`);
+                return;
+            }
         }
         
-        let circleName = centerName || (center ? center.name : '');
+        // 如果提供了圆心名称但圆心不存在，使用点名称绘制
+        if (centerName && !center) {
+            center = points[centerName];
+            if (!center) {
+                console.log(`点 ${centerName} 不存在，请先定义该点或提供坐标`);
+                return;
+            }
+        }
         
         if (center && radius > 0) {
+            console.log('[DEBUG圆] 调用drawCircle center=' + JSON.stringify(center) + ' radius=' + radius + ' color=' + color);
             drawCircle(center, radius, color, needsFill);
-            if (circleName) {
-                createShape('circle', '圆' + circleName, [circleName], color, needsFill);
+            if (centerName) {
+                createShape('circle', '圆' + centerName, [centerName], color, needsFill);
+            } else {
+                // 当parsePoint返回了点对象但没有设置centerName时，从center.name获取
+                const name = center.name || '';
+                if (name) {
+                    createShape('circle', '圆' + name, [name], color, needsFill);
+                }
             }
-        } else if (center) {
-            // 有圆心但没有半径，使用默认大小
-            drawCircle(center, autoSize, color, needsFill);
-            if (circleName) {
-                createShape('circle', '圆' + circleName, [circleName], color, needsFill);
-            }
+            console.log('已创建图形 圆' + (centerName || center.name || '') + ' (circle)');
+        } else if (center && radius === 0) {
+            console.log('请提供半径值或线段');
         } else {
-            // 自动布局模式
-            if (!centerName) {
-                centerName = getNextAvailableLetter(14); // 从O开始（第15个字母，索引14）
-            }
-            const autoResult = autoCircle(centerName);
-            drawCircle(autoResult.center, autoResult.radius, color, needsFill);
-            createShape('circle', '圆' + centerName, [centerName], color, needsFill);
+            console.log('请提供圆心点和半径');
         }
     }
     else if (type === '点') {
@@ -668,25 +967,33 @@ function executeCommand(cmd, skipHistory = false) {
             pointArgs.push(parts[i]);
         }
         
+        // 提取点名称
+        let allPointNames = [];
+        pointArgs.forEach(arg => {
+            allPointNames = allPointNames.concat(extractPointNames(arg));
+        });
+        
+        // 检查是否有坐标
         const hasCoordinates = pointArgs.some(p => p.includes('(') && p.includes(')'));
         
-        if (!hasCoordinates) {
-            let allPointNames = [];
-            pointArgs.forEach(arg => {
-                allPointNames = allPointNames.concat(extractPointNames(arg));
-            });
-            // 如果没有提供点名称，自动分配3个
-            if (allPointNames.length === 0) {
-                allPointNames = getNextAvailableLetters(3);
-            }
-            while (allPointNames.length < 3) {
-                allPointNames.push(String.fromCharCode(65 + allPointNames.length));
-            }
-            const triPoints = autoTriangle(allPointNames);
+        // 如果既没有点名称也没有坐标，提示用户
+        if (allPointNames.length === 0 && !hasCoordinates) {
+            console.log('请输入3个点的名称，如：三角形abc');
+            return;
+        }
+        
+        // 检查所有点是否都已存在
+        const allPointsExist = allPointNames.length === 3 && 
+                               allPointNames.every(name => points[name]);
+        
+        if (allPointsExist) {
+            // 使用已存在的点绘制三角形
+            const triPoints = allPointNames.map(name => points[name]);
             drawTriangle(triPoints, color, needsFill);
             // 创建图形对象
             createShape('triangle', allPointNames.join(''), allPointNames, color, needsFill);
-        } else {
+        } else if (hasCoordinates) {
+            // 使用坐标绘制三角形
             const triPoints = [];
             const pointNames = [];
             pointArgs.forEach(p => {
@@ -696,11 +1003,23 @@ function executeCommand(cmd, skipHistory = false) {
                     if (parsed.name) pointNames.push(parsed.name);
                 }
             });
+            if (triPoints.length === 3) {
+                drawTriangle(triPoints, color, needsFill);
+                // 创建图形对象
+                if (pointNames.length === 3) {
+                    createShape('triangle', pointNames.join(''), pointNames, color, needsFill);
+                }
+            } else {
+                console.log('请提供3个点的坐标，如：三角形 A(100,200) B(200,200) C(150,300)');
+            }
+        } else if (allPointNames.length === 3) {
+            // 提供了点名称但点不存在，自动生成这些点
+            const triPoints = autoTriangle(allPointNames);
             drawTriangle(triPoints, color, needsFill);
             // 创建图形对象
-            if (pointNames.length === 3) {
-                createShape('triangle', pointNames.join(''), pointNames, color, needsFill);
-            }
+            createShape('triangle', allPointNames.join(''), allPointNames, color, needsFill);
+        } else {
+            console.log('请输入3个点的名称，如：三角形abc');
         }
     }
     else if (type === '坐标系') {
@@ -845,7 +1164,14 @@ function executeCommand(cmd, skipHistory = false) {
                         color: color,
                         fill: false
                     };
-                    shapes.push(shape);
+                    // 记录到shapeList
+                    addShapeToList('triangle', newShapeName, newPoints.map(p => p.name), {
+                        shape: shape,
+                        points: newPoints.map(p => ({name: p.name, x: p.x, y: p.y})),
+                        type: 'triangle',
+                        color: color,
+                        fill: false
+                    });
                 } else if (shapePoints.length === 4) {
                     drawRectangle(newPoints, color, false);
                     // 创建旋转后矩形的shape对象
@@ -856,7 +1182,14 @@ function executeCommand(cmd, skipHistory = false) {
                         color: color,
                         fill: false
                     };
-                    shapes.push(shape);
+                    // 记录到shapeList（addShapeToList内部同步shapes）
+                    addShapeToList('rectangle', newShapeName, newPoints.map(p => p.name), {
+                        shape: shape,
+                        points: newPoints.map(p => ({name: p.name, x: p.x, y: p.y})),
+                        type: 'rectangle',
+                        color: color,
+                        fill: false
+                    });
                 }
             }
         }
@@ -901,7 +1234,14 @@ function executeCommand(cmd, skipHistory = false) {
                         color: color,
                         fill: false
                     };
-                    shapes.push(shape);
+                    // 记录到shapeList
+                    addShapeToList('triangle', newShapeName, newPoints.map(p => p.name), {
+                        shape: shape,
+                        points: newPoints.map(p => ({name: p.name, x: p.x, y: p.y})),
+                        type: 'triangle',
+                        color: color,
+                        fill: false
+                    });
                 } else if (shapePoints.length === 4) {
                     drawRectangle(newPoints, color, false);
                     // 创建对称后矩形的shape对象
@@ -912,7 +1252,14 @@ function executeCommand(cmd, skipHistory = false) {
                         color: color,
                         fill: false
                     };
-                    shapes.push(shape);
+                    // 记录到shapeList
+                    addShapeToList('rectangle', newShapeName, newPoints.map(p => p.name), {
+                        shape: shape,
+                        points: newPoints.map(p => ({name: p.name, x: p.x, y: p.y})),
+                        type: 'rectangle',
+                        color: color,
+                        fill: false
+                    });
                 }
             }
         }
@@ -956,11 +1303,18 @@ function executeCommand(cmd, skipHistory = false) {
                     const shape = {
                         type: 'triangle',
                         name: newShapeName,
-                        pointNames: newPoints.map(p => p.name),
+                        point: newPoints.map(p => p.name),
                         color: color,
                         fill: false
                     };
-                    shapes.push(shape);
+                    // 记录到shapeList
+                    addShapeToList('triangle', newShapeName, newPoints.map(p => p.name), {
+                        shape: shape,
+                        points: newPoints.map(p => ({name: p.name, x: p.x, y: p.y})),
+                        type: 'triangle',
+                        color: color,
+                        fill: false
+                    });
                 } else if (shapePoints.length === 4) {
                     drawRectangle(newPoints, color, false);
                     // 创建平移后矩形的shape对象
@@ -971,7 +1325,14 @@ function executeCommand(cmd, skipHistory = false) {
                         color: color,
                         fill: false
                     };
-                    shapes.push(shape);
+                    // 记录到shapeList
+                    addShapeToList('rectangle', newShapeName, newPoints.map(p => p.name), {
+                        shape: shape,
+                        points: newPoints.map(p => ({name: p.name, x: p.x, y: p.y})),
+                        type: 'rectangle',
+                        color: color,
+                        fill: false
+                    });
                 }
             }
         }
@@ -1218,6 +1579,7 @@ function executeCommand(cmd, skipHistory = false) {
         
         let deletedState;
         let deletedShape = null;
+        let deletedShapeListEntry = null;
         
         if (isRedo) {
             // 重做时，使用之前保存的删除状态
@@ -1232,18 +1594,49 @@ function executeCommand(cmd, skipHistory = false) {
             };
             
             // 在shapes数组中查找要删除的图形
-            deletedShape = shapes.find(s => s.name === target || 
-                                         (target.includes('三角形') && s.name === target.substring(3)) ||
-                                         ((target.includes('矩形') || target.includes('长方形')) && s.name === target.substring(2)) ||
-                                         (target.includes('圆') && s.name === target));
+            // shapes数组中的name格式：'点A', '三角形abc', '矩形abcd', '圆O'
+            // 输入target格式：'A', '三角形abc', '矩形abcd', '圆O' 或 'abcd', 'O'
+            deletedShape = shapes.find(s => {
+                // 直接匹配完整名称
+                if (s.name === target) return true;
+                
+                // 如果target包含"矩形"或"长方形"，去掉前缀后匹配
+                if ((target.includes('矩形') || target.includes('长方形')) && 
+                    s.type === 'rectangle' && 
+                    target.substring(2) === s.name) {
+                    return true;
+                }
+                
+                // 如果target包含"三角形"，去掉前缀后匹配
+                if (target.includes('三角形') && 
+                    s.type === 'triangle' && 
+                    target.substring(3) === s.name) {
+                    return true;
+                }
+                
+                // 如果是圆，输入可能是圆心点名
+                if (s.type === 'circle' && target === s.name.substring(1)) return true;
+                
+                // 如果是点，输入可能是点名
+                if (s.type === 'point' && target === s.name) return true;
+                
+                return false;
+            });
+            
+            console.log(`删除命令: 查找target="${target}", deletedShape=${deletedShape ? deletedShape.name : 'null'}`);
         }
         
         // 根据找到的图形或直接删除
         if (deletedShape) {
-            // 删除图形对象
+            // 同时从shapes和shapeList中删除
             const shapeIndex = shapes.findIndex(s => s === deletedShape);
             if (shapeIndex !== -1) {
                 shapes.splice(shapeIndex, 1);
+            }
+            // 同步从shapeList中删除，并保存被删除的entry用于撤销
+            const shapeListIndex = shapeList.findIndex(s => s.data && s.data.shape === deletedShape);
+            if (shapeListIndex !== -1) {
+                deletedShapeListEntry = shapeList.splice(shapeListIndex, 1)[0];
             }
             
             // 删除图形关联的点
@@ -1335,7 +1728,8 @@ function executeCommand(cmd, skipHistory = false) {
             commandHistory[commandHistory.length - 1] = {
                 cmd: cmd,
                 deletedState: deletedState,
-                deletedShape: deletedShape
+                deletedShape: deletedShape,
+                deletedShapeListEntry: deletedShapeListEntry || null
             };
         }
         
@@ -1355,7 +1749,35 @@ function executeCommand(cmd, skipHistory = false) {
         });
     }
     else if (type === '清空' || type === '清除') {
+        if (isRedo) {
+            return;
+        }
+        
+        // 只有在非重做且非重绘情况下，才将清除状态存储在命令历史中
+        if (!skipHistory && commandHistory.length > 0) {
+            // 保存清除前的状态用于撤销（包括shapes和shapeList）
+            const clearedState = {
+                points: JSON.parse(JSON.stringify(points)),
+                labeledPoints: Array.from(labeledPoints),
+                shapes: JSON.parse(JSON.stringify(shapes)),
+                shapeList: JSON.parse(JSON.stringify(shapeList))
+            };
+            
+            // 更新commandHistory中的最后一个命令
+            commandHistory[commandHistory.length - 1] = {
+                cmd: fullCommand,
+                clearedState: clearedState
+            };
+        }
+        
+        // 清空画布
         clearCanvas();
+        // 清空shapes数组和shapeList（统一清空）
+        shapes.length = 0;
+        shapeList.length = 0;
+        // 清空redoStack
+        redoStack.length = 0;
+        console.log('画布已清空');
     }
 }
 
@@ -1382,7 +1804,7 @@ function showHelp() {
 
 【变换功能】
   旋转 矩形abcd 绕a 90      绕点a旋转矩形90度，生成A'B'C'D'
-  对称 矩形abcd 关于直线ac  关于直线ac对称，生成A'B'C'D'
+  对称 矩形abcd 关于直线ac  关于直线ac对称，生成A'BC'D'
   平移 矩形abcd 使a到e      平移矩形使a点到e位置
 
 【函数曲线】
@@ -1397,24 +1819,276 @@ function showHelp() {
   矩形abcd 填充       绘制填充的矩形
   颜色为红；矩形abcd 填充；颜色为蓝；圆O 50；颜色为绿；三角形abc
 
-【操作管理】
+【操作命令】
   撤销/undo          撤销上一个操作
   重做/redo           重做上一次撤销的操作
-  清空/清除           清空画布
-  删除 a              删除点a
-  删除 ab             删除线段ab
-  删除 三角形abc       删除三角形abc
-  删除 矩形abcd       删除矩形abcd
+  删除/remove/del     删除指定图形、点或线段
+  清空/清除           清空画布`;
 
-【其他】
-  帮助/help/?        显示此帮助信息
-
-提示：所有图形自动布局，无需手动指定坐标（坐标系除外）`;
-    
     console.log(helpText);
+}
+
+// 将全局变量暴露到window，供其他模块访问
+window.commandHistory = commandHistory;
+window.redoStack = redoStack;
+window.executeCommand = executeCommand;
+window.showHelp = showHelp;
+
+/**
+ * 显示图形列表
+ */
+function showShapeList() {
+    if (shapeList.length === 0) {
+        console.log('当前没有绘制的图形');
+        const outputElement = document.getElementById('output');
+        if (outputElement) {
+            outputElement.innerHTML += '当前没有绘制的图形<br>';
+        }
+        return;
+    }
     
-    // 尝试在页面上显示
-    if (typeof alert !== 'undefined') {
-        alert(helpText);
+    let output = '图形清单 (共' + shapeList.length + '个)：<br>';
+    shapeList.forEach((shape, index) => {
+        output += (index + 1) + '. ' + shape.name + ' - 点：' + (shape.points || []).join(',') + '<br>';
+    });
+    
+    console.log(output.replace(/<br>/g, '\n'));
+    const outputElement = document.getElementById('output');
+    if (outputElement) {
+        outputElement.innerHTML += output;
+    }
+}
+
+/**
+ * 处理删除命令
+ */
+function handleDeleteCommand(cmd, parts) {
+    if (parts.length < 2) {
+        console.log('请指定删除目标：删除[矩形|线段|圆|...], 或 删除[图形名], 或 删除点[点名], 或 删除最新的');
+        return;
+    }
+    
+    const target = parts[1];
+    
+    // 删除类型
+    const shapeTypes = ['矩形', '长方形', '直线', '线段', '角', '圆', '中点', '分点', '三角形', '旋转', '对称', '对折', '平移'];
+    if (shapeTypes.includes(target)) {
+        // 如果类型后面还有参数，则是按名称删除（如"删除 矩形 abcd"→删除名称为abcd的矩形）
+        if (parts.length > 2) {
+            const shapeName = target + parts.slice(2).join('');
+            deleteShapeByName(shapeName);
+        } else {
+            deleteShapesByType(target);
+        }
+        return;
+    }
+    
+    // 删除点名
+    if (target === '点' && parts[2]) {
+        deleteShapesByPoint(parts[2]);
+        return;
+    }
+    
+    // 删除最新
+    if (target === '最新' || target === 'latest') {
+        deleteLatestShape();
+        return;
+    }
+    
+    // 删除图形名（可能是"删除矩形abcd"）
+    const shapeName = cmd.substring(2).trim();
+    deleteShapeByName(shapeName);
+}
+
+/**
+ * 按类型删除图形并重绘
+ * @param {string} type - 图形类型
+ * @param {boolean} skipHistory - 是否跳过历史记录
+ */
+function deleteShapesByType(type, skipHistory = false) {
+    if (!skipHistory) {
+        // 保存删除前的状态
+        const deletedState = {
+            points: JSON.parse(JSON.stringify(points)),
+            labeledPoints: Array.from(labeledPoints),
+            shapes: JSON.parse(JSON.stringify(shapes)),
+            functions: JSON.parse(JSON.stringify(functions)),
+            shapeList: JSON.parse(JSON.stringify(shapeList)),
+            globalColor: globalColor
+        };
+        
+        // 记录到历史
+        commandHistory.push({
+            cmd: '删除' + type,
+            deletedState: deletedState
+        });
+    }
+    
+    const ids = removeShapesByType(type);
+    if (ids.length === 0) {
+        console.log('没有找到类型为"' + type + '"的图形');
+        return;
+    }
+    
+    // 重建画布
+    rebuildCanvas();
+    console.log('已删除 ' + ids.length + ' 个' + type);
+}
+
+/**
+ * 按名称删除图形并重绘
+ * @param {string} name - 图形名称
+ * @param {boolean} skipHistory - 是否跳过历史记录
+ */
+function deleteShapeByName(name, skipHistory = false) {
+    if (!skipHistory) {
+        // 保存删除前的状态
+        const deletedState = {
+            points: JSON.parse(JSON.stringify(points)),
+            labeledPoints: Array.from(labeledPoints),
+            shapes: JSON.parse(JSON.stringify(shapes)),
+            functions: JSON.parse(JSON.stringify(functions)),
+            shapeList: JSON.parse(JSON.stringify(shapeList)),
+            globalColor: globalColor
+        };
+        
+        // 记录到历史
+        commandHistory.push({
+            cmd: '删除' + name,
+            deletedState: deletedState
+        });
+    }
+    
+    const ids = removeShapesByName(name);
+    if (ids.length === 0) {
+        console.log('没有找到名为"' + name + '"的图形');
+        return;
+    }
+    
+    rebuildCanvas();
+    console.log('已删除：' + name);
+}
+
+/**
+ * 按点删除图形并重绘
+ * @param {string} pointName - 点名称
+ * @param {boolean} skipHistory - 是否跳过历史记录
+ */
+function deleteShapesByPoint(pointName, skipHistory = false) {
+    if (!skipHistory) {
+        // 保存删除前的状态
+        const deletedState = {
+            points: JSON.parse(JSON.stringify(points)),
+            labeledPoints: Array.from(labeledPoints),
+            shapes: JSON.parse(JSON.stringify(shapes)),
+            functions: JSON.parse(JSON.stringify(functions)),
+            shapeList: JSON.parse(JSON.stringify(shapeList)),
+            globalColor: globalColor
+        };
+        
+        // 记录到历史
+        commandHistory.push({
+            cmd: '删除点' + pointName,
+            deletedState: deletedState
+        });
+    }
+    
+    const ids = removeShapesByPoint(pointName);
+    if (ids.length === 0) {
+        console.log('没有找到包含点"' + pointName + '"的图形');
+        return;
+    }
+    
+    rebuildCanvas();
+    console.log('已删除 ' + ids.length + ' 个包含点' + pointName + '的图形');
+}
+
+/**
+ * 删除最新图形
+ * @param {boolean} skipHistory - 是否跳过历史记录
+ */
+function deleteLatestShape(skipHistory = false) {
+    if (shapeList.length === 0) {
+        console.log('当前没有图形可删除');
+        return;
+    }
+    
+    if (!skipHistory) {
+        // 保存删除前的
+        const deletedState = {
+            points: JSON.parse(JSON.stringify(points)),
+            labeledPoints: Array.from(labeledPoints),
+            shapes: JSON.parse(JSON.stringify(shapes)),
+            functions: JSON.parse(JSON.stringify(functions)),
+            shapeList: JSON.parse(JSON.stringify(shapeList)),
+            globalColor: globalColor
+        };
+        
+        // 记录到历史
+        commandHistory.push({
+            cmd: '删除最新的',
+            deletedState: deletedState
+        });
+    }
+    
+    const shape = shapeList.pop();
+    rebuildCanvas();
+    console.log('已删除最新图形：' + shape.name);
+}
+
+/**
+ * 重建画布（根据shapeList重新执行绘制）
+ */
+function rebuildCanvas() {
+    clearCanvas(false);
+    
+    // 清空所有数据
+    Object.keys(points).forEach(key => delete points[key]);
+    labeledPoints.clear();
+    shapes.length = 0;
+    Object.keys(functions).forEach(key => delete functions[key]);
+    
+    // 注意：不清空shapeList，因为rebuildCanvas是基于shapeList重建的
+    
+    // 按创建时间排序
+    const sortedShapes = [...shapeList].sort((a, b) => a.createdAt - b.createdAt);
+    
+    // 重新绘制所有图形
+    sortedShapes.forEach(shape => {
+        redrawShape(shape);
+    });
+}
+
+/**
+ * 重绘单个图形
+ */
+function redrawShape(shape) {
+    if (!shape.data || !shape.data.shape) return;
+    
+    // 恢复点数据
+    if (shape.data.points) {
+        shape.data.points.forEach(p => {
+            points[p.name] = {x: p.x, y: p.y};
+            labeledPoints.add(p.name);
+        });
+    }
+    
+    // 恢复图形对象
+    const shapeData = shape.data.shape;
+    shapes.push(shapeData);
+    
+    // 重绘
+    if (shapeData.type === 'line') {
+        drawLine(shapeData.start, shapeData.end, shapeData.color, false);
+    } else if (shapeData.type === 'rectangle') {
+        drawRectangle(shapeData.points, shapeData.color, shapeData.fill);
+    } else if (shapeData.type === 'circle') {
+        drawCircle(shapeData.center, shapeData.radius, shapeData.color, false);
+    } else if (shapeData.type === 'triangle') {
+        drawTriangle(shapeData.points, shapeData.color, shapeData.fill);
+    } else if (shapeData.type === 'angle') {
+        drawAngle(shapeData.start, shapeData.vertex, shapeData.end, shapeData.color);
+    } else if (shapeData.type === 'segment') {
+        drawLine(shapeData.start, shapeData.end, shapeData.color, false);
     }
 }

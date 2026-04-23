@@ -9,7 +9,8 @@ const points = {};
 // 记录已标注的点，避免重复
 const labeledPoints = new Set();
 
-// 保存所有图形对象
+// shapes 数组已废弃，改用 shapeList (commands.js) 作为唯一数据源
+// 保留此变量仅为向后兼容，实际数据从 shapeList 派生
 const shapes = [];
 
 // 颜色映射
@@ -106,7 +107,7 @@ function isPurePointName(str) {
  * @returns {boolean}
  */
 function isSegmentName(str) {
-    return /^[A-Za-z]{2x}$/.test(str);
+    return /^[A-Za-z]{2}$/.test(str);
 }
 
 /**
@@ -198,11 +199,23 @@ function clearPoints() {
         delete points[key];
     }
     labeledPoints.clear();
-    // 清空shapes数组
+    // 同步清空 shapes 和 shapeList
     shapes.length = 0;
+    if (window.shapeList) {
+        window.shapeList.length = 0;
+    }
 }
 
 // 将全局变量暴露到window，供其他模块访问
 window.points = points;
 window.labeledPoints = labeledPoints;
-window.shapes = shapes;
+// shapes需要作为getter，确保始终引用最新的数组
+Object.defineProperty(window, 'shapes', {
+    get: function() { return shapes; },
+    set: function(val) { 
+        // 清空shapes并添加新元素
+        shapes.length = 0;
+        val.forEach(item => shapes.push(item));
+    },
+    configurable: false
+});

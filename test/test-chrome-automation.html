@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1几何绘图 - Chrome自动化测试</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        h2 {
+            color: #666;
+            margin: 15px 0 10px;
+            font-size: 18px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .test-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .test-item {
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border-left: 4px solid #ddd;
+            background: #f9f9f9;
+            transition: all 0.3s;
+        }
+        .test-item.pending {
+            border-left-color: #ff9800;
+        }
+        .test-item.running {
+            border-left-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .test-item.pass {
+            border-left-color: #4CAF50;
+            background: #e8f5e9;
+        }
+        .test-item.fail {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+        .test-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .test-command {
+            font-family: 'Monaco', monospace;
+            font-size: 12px;
+            color: #666;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .test-expected {
+            font-size: 12px;
+            color: #888;
+            margin-top: 3px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-start:hover {
+            background: #45a049;
+        }
+        .btn-start:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-reset {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-reset:hover {
+            background: #0b7dda;
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px 0;
+        }
+        .log-time {
+            color: #888;
+        }
+        .iframe-container {
+            width: 100%;
+            height: 100%;
+            min-height: 600px;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: 8px;
+        }
+        .progress-bar {
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #4CAF50;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧：测试控制面板 -->
+        <div class="panel">
+            <h1>🎨 F1几何绘图 - 自动化测试</h1>
+
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-number" id="totalCount">0</div>
+                    <div class="stat-label">总测试数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="passCount" style="color: #4CAF50;">0</div>
+                    <div class="stat-label">通过</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="failCount" style="color: #f44336;">0</div>
+                    <div class="stat-label">失败</div>
+                </div>
+            </div>
+
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%;"></div>
+            </div>
+
+            <div class="controls">
+                <button class="btn-start" id="startBtn" onclick="startTest()">▶ 开始测试</button>
+                <button class="btn-reset" onclick="resetTest()">↺ 重置</button>
+            </div>
+
+            <h2>测试用例</h2>
+            <div class="test-list" id="testList"></div>
+
+            <h2>测试日志</h2>
+            <div class="log" id="log"></div>
+        </div>
+
+        <!-- 右侧：F1页面 -->
+        <div class="panel">
+            <h1>F1 几何绘图工具</h1>
+            <div class="iframe-container">
+                <iframe id="f1Frm" src="http://39.106.26.127/f1/" onload="onFrmLoad()"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const f1Url = 'http://39.106.26.127/f1/';
+        let tests = [
+            { name: '清空画布', command: '清空', expected: '画布应该被清空', delay: 500 },
+            { name: '绘制矩形', command: '矩形abcd', expected: '应该显示矩形ABCD', delay: 1000 },
+            { name: '绘制中点', command: '中点 a b e', expected: '应该创建中点E', delay: 1000 },
+            { name: '绘制三角形', command: '三角形ace', expected: '应该显示三角形ACE', delay: 1000 },
+            { name: '设置红色', command: '颜色为红', expected: '颜色应该变为红色', delay: 500 },
+            { name: '绘制圆', command: '圆 e ab', expected: '应该显示圆心E，半径为AB', delay: 1000 },
+            { name: '撤销操作', command: '撤销', expected: '应该撤销上一步操作', delay: 500 },
+            { name: '重做操作', command: '重做', expected: '应该重做上一次撤销的操作', delay: 500 },
+            { name: '设置蓝色', command: '颜色为蓝', expected: '颜色应该变为蓝色', delay: 500 },
+            { name: '绘制线段', command: '线段ab', expected: '应该显示蓝色线段AB', delay: 1000 },
+            { name: '绘制角', command: '角 a b c', expected: '应该显示角ABC（顶点B）', delay: 1000 },
+            { name: '创建1/3分点', command: '分点 a b f 1/3', expected: '应该创建AB的1/3分点F', delay: 1000 },
+            { name: '设置绿色', command: '颜色为绿', expected: '颜色应该变为绿色', delay: 500 },
+            { name: '绘制三角形ABF', command: '三角形abf', expected: '应该显示绿色三角形ABF', delay: 1000 },
+            { name: '清空画布', command: '清空', expected: '画布应该被清空', delay: 500 }
+        ];
+
+        let currentTest = 0;
+        let passCount = 0;
+        let failCount = 0;
+        let isRunning = false;
+        let isFrmLoad = false;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✓' : 'ℹ';
+            const color = type === 'error' ? '#f44336' : type === 'success' ? '#4CAF50' : '#d4d4d4';
+            
+            logDiv.innerHTML += `<div class="log-entry" style="color: ${color};">
+                <span class="log-time">[${time}]</span> ${prefix} ${message}
+            </div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function initTests() {
+            const testList = document.getElementById('testList');
+            testList.innerHTML = '';
+            
+            tests.forEach((test, index) => {
+                const div = document.createElement('div');
+                div.id = `test-${index}`;
+                div.className = 'test-item pending';
+                div.innerHTML = `
+                    <div class="test-name">${index + 1}. ${test.name}</div>
+                    <div class="test-command">${test.command}</div>
+                    <div class="test-expected">预期: ${test.expected}</div>
+                `;
+                testList.appendChild(div);
+            });
+            
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('totalCount').textContent = tests.length;
+            document.getElementById('passCount').textContent = passCount;
+            document.getElementById('failCount').textContent = failCount;
+            
+            const progress = ((passCount + failCount) / tests.length) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+        }
+
+        function onFrmLoad() {
+            isFrmLoad = true;
+            log('F1页面加载成功', 'success');
+        }
+
+        async function executeTest(test, index) {
+            const testDiv = document.getElementById(`test-${index}`);
+            testDiv.className = 'test-item running';
+            
+            log(`[${index + 1}/${tests.length}] ${test.name}`);
+            log(`  命令: ${test.command}`);
+            
+            try {
+                const frm = document.getElementById('f1Frm');
+                const input = frm.contentWindow.document.getElementById('commandInput');
+                
+                if (!input) {
+                    throw new Error('找不到命令输入框');
+                }
+                
+                // 清空并输入命令
+                input.value = '';
+                await sleep(50);
+                input.value = test.command;
+                
+                // 触发事件
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                
+                log(`  ✓ 命令已发送`, 'success');
+                passCount++;
+                testDiv.className = 'test-item pass';
+                
+            } catch (error) {
+                log(`  ✗ 错误: ${error.message}`, 'error');
+                failCount++;
+                testDiv.className = 'test-item fail';
+            }
+            
+            updateStats();
+            await sleep(test.delay);
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function startTest() {
+            if (isRunning) return;
+            if (!isFrmLoad) {
+                log('F1页面未加载，请等待...', 'error');
+                return;
+            }
+            
+            isRunning = true;
+            document.getElementById('startBtn').disabled = true;
+            
+            log('========================================');
+            log('开始执行测试用例');
+            log('========================================');
+            
+            for (let i = currentTest; i < tests.length; i++) {
+                if (!isRunning) break;
+                await executeTest(tests[i], i);
+                currentTest = i + 1;
+            }
+            
+            log('========================================');
+            log('测试完成！');
+            log(`通过: ${passCount}/${tests.length}`);
+            log(`成功率: ${(passCount / tests.length * 100).toFixed(2)}%`);
+            log('========================================');
+            log('请检查右侧画布上的图形结果');
+            
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+        }
+
+        function resetTest() {
+            isRunning = false;
+            currentTest = 0;
+            passCount = 0;
+            failCount = 0;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('log').innerHTML = '';
+            
+            initTests();
+            log('测试已重置', 'success');
+        }
+
+        // 初始化
+        window.onload = function() {
+            initTests();
+            log('测试环境已就绪');
+            log('等待F1页面加载...');
+        };
+    </script>
+</body>
+</html>

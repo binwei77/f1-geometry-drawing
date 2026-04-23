@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1自动化测试报告</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-result {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case {
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        .pass { background: #e8f5e9; border-color: #4caf50; }
+        .fail { background: #ffebee; border-color: #f44336; }
+        .skip { background: #fff3e0; border-color: #ff9800; }
+        .test-case strong { display: block; margin-bottom: 4px; }
+        .test-case code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stat {
+            padding: 10px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+        }
+        .stat.pass { background: #4caf50; }
+        .stat.fail { background: #f44336; }
+        .stat.skip { background: #ff9800; }
+        .input-box {
+            width: 100%;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover { background: #1976d2; }
+        button.run { background: #4caf50; }
+        button.run:hover { background: #388e3c; }
+        #canvas-container {
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 F1几何绘图 - 自动化测试</h1>
+
+    <div class="test-result">
+        <h2>测试统计</h2>
+        <div class="stats" id="stats">
+            <div class="stat pass">通过: <span id="pass-count">0</span></div>
+            <div class="stat fail">失败: <span id="fail-count">0</span></div>
+            <div class="stat skip">跳过: <span id="skip-count">0</span></div>
+        </div>
+        <button onclick="runAllTests()" class="run">▶ 运行所有测试</button>
+        <button onclick="runTest(0)">测试1: 页面加载</button>
+        <button onclick="runTest(1)">测试2: 基本绘图</button>
+        <button onclick="runTest(2)">测试3: 命令输入</button>
+    </div>
+
+    <div class="test-result">
+        <h2>测试用例</h2>
+        <div id="test-results"></div>
+    </div>
+
+    <div class="test-result">
+        <h2>手动测试</h2>
+        <p>输入命令测试（直接按Enter执行）：</p>
+        <input type="text" class="input-box" id="manual-input" placeholder="例如：点o 200,200;点a 100,100;点b 300,100;矩形abcd" onkeypress="if(event.key==='Enter') executeManual()">
+        <div id="canvas-container">
+            <iframe id="f1-iframe" src="http://39.106.26.127/f1/" width="100%" height="400" style="border:none;"></iframe>
+        </div>
+        <div id="manual-output" style="margin-top:10px; color:#666;"></div>
+    </div>
+
+    <script>
+        let passCount = 0, failCount = 0, skipCount = 0;
+
+        const tests = [
+            {
+                name: '页面加载测试',
+                fn: testPageLoad
+            },
+            {
+                name: '基本绘图测试',
+                fn: testBasicDrawing
+            },
+            {
+                name: '命令输入测试',
+                fn: testCommandInput
+            },
+            {
+                name: '撤销/重做测试',
+                fn: testUndoRedo
+            },
+            {
+                name: '缩放功能测试',
+                fn: testZoom
+            },
+            {
+                name: '帮助命令测试',
+                fn: testHelp
+            }
+        ];
+
+        function updateStats() {
+            document.getElementById('pass-count').textContent = passCount;
+            document.getElementById('fail-count').textContent = failCount;
+            document.getElementById('skip-count').textContent = skipCount;
+        }
+
+        function addResult(testName, status, message, command = '') {
+            const resultsDiv = document.getElementById('test-results');
+            const div = document.createElement('div');
+            div.className = `test-case ${status}`;
+            const icon = status === 'pass' ? '✓' : status === 'fail' ? '✗' : '⊘';
+            div.innerHTML = `
+                <strong>${icon} ${testName}</strong>
+                ${command ? `<code>命令: ${command}</code><br>` : ''}
+                <span>${message}</span>
+            `;
+            resultsDiv.appendChild(div);
+
+            if (status === 'pass') passCount++;
+            else if (status === 'fail') failCount++;
+            else skipCount++;
+
+            updateStats();
+        }
+
+        async function getIframeContent() {
+            const iframe = document.getElementById('f1-iframe');
+            try {
+                return iframe.contentWindow;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function testPageLoad() {
+            const iframe = document.getElementById('f1-iframe');
+            return new Promise(resolve => {
+                setTimeout(async () => {
+                    try {
+                        const win = iframe.contentWindow;
+                        if (!win || !win.document) {
+                            addResult('页面加载', 'fail', '无法访问iframe内容');
+                            resolve();
+                            return;
+                        }
+
+                        const doc = win.document;
+                        const hasCanvas = doc.querySelector('canvas') !== null;
+                        const hasInput = doc.querySelector('input[type="text"]') !== null;
+                        const title = doc.title;
+
+                        if (hasCanvas && hasInput) {
+                            addResult('页面加载', 'pass', `页面标题: "${title}", Canvas和输入框均存在`);
+                        } else {
+                            addResult('页面加载', 'fail', `Canvas: ${hasCanvas}, 输入框: ${hasInput}`);
+                        }
+                    } catch (e) {
+                        addResult('页面加载', 'fail', `跨域限制或加载错误: ${e.message}`);
+                    }
+            resolve();
+                }, 1000);
+            });
+        }
+
+        async function testBasicDrawing() {
+            const iframe = document.getElementById('f1-iframe');
+            try {
+                const win = iframe.contentWindow;
+                if (!win) {
+                    addResult('基本绘图', 'skip', '无法访问iframe，可能存在跨域限制');
+                    return;
+                }
+
+                const doc = win.document;
+                const canvas = doc.querySelector('canvas');
+                if (!canvas) {
+                    addResult('基本绘图', 'fail', '找不到Canvas元素');
+                    return;
+                }
+
+                // 检查Canvas是否可以绘制
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    addResult('基本绘图', 'pass', 'Canvas上下文获取成功');
+                } else {
+                    addResult('基本绘图', 'fail', '无法获取Canvas 2D上下文');
+                }
+            } catch (e) {
+                addResult('基本绘图', 'skip', `测试跳过: ${e.message} (跨域限制)`);
+            }
+        }
+
+        async function testCommandInput() {
+            const iframe = document.getElementById('f1-iframe');
+            try {
+                const win = iframe.contentWindow;
+                if (!win) {
+                    addResult('命令输入', 'skip', '跨域限制');
+            return;
+                }
+
+                const doc = win.document;
+                const input = doc.querySelector('input[type="text"]');
+                if (input) {
+                    addResult('命令输入', 'pass', '输入框元素存在，可以输入命令');
+                } else {
+                    addResult('命令输入', 'fail', '找不到输入框');
+                }
+            } catch (e) {
+                addResult('命令输入', 'skip', `测试跳过: ${e.message}`);
+            }
+        }
+
+        async function testUndoRedo() {
+            const iframe = document.getElementById('f1-iframe');
+            try {
+                const win = iframe.contentWindow;
+                if (!win) {
+                    addResult('撤销/重做', 'skip', '跨域限制');
+                    return;
+                }
+
+                const doc = win.document;
+                const buttons = doc.querySelectorAll('button');
+                let hasUndo = false, hasRedo = false;
+
+                buttons.forEach(btn => {
+                    const text = btn.textContent;
+                    if (text.includes('撤销')) hasUndo = true;
+                    if (text.includes('重做')) hasRedo = true;
+                });
+
+                if (hasUndo && hasRedo) {
+                    addResult('撤销/重做', 'pass', '撤销和重做按钮都存在');
+                } else {
+                    addResult('撤销/重做', 'fail', `撤销按钮: ${hasUndo}, 重做按钮: ${hasRedo}`);
+                }
+            } catch (e) {
+                addResult('撤销/重做', 'skip', `测试跳过: ${e.message}`);
+            }
+        }
+
+        async function testZoom() {
+            const iframe = document.getElementById('f1-iframe');
+            try {
+                const win = iframe.contentWindow;
+                if (!win) {
+                    addResult('缩放功能', 'skip', '跨域限制');
+                    return;
+                }
+
+                const doc = win.document;
+                const buttons = doc.querySelectorAll('button');
+                let hasZoomIn = false, hasZoomOut = false;
+
+                buttons.forEach(btn => {
+                    const text = btn.textContent;
+                    if (text.includes('+')) hasZoomIn = true;
+                    if (text.includes('-')) hasZoomOut = true;
+                });
+
+                if (hasZoomIn && hasZoomOut) {
+                    addResult('缩放功能', 'pass', '放大和缩小按钮都存在');
+                } else {
+                    addResult('缩放功能', 'fail', `放大按钮: ${hasZoomIn}, 缩小按钮: ${hasZoomOut}`);
+                }
+            } catch (e) {
+                addResult('缩放功能', 'skip', `测试跳过: ${e.message}`);
+            }
+        }
+
+        async function testHelp() {
+            addResult('帮助命令', 'skip', '需要手动测试: 在iframe中输入"帮助"、"help"或"?"');
+        }
+
+        async function runTest(index) {
+            if (index >= 0 && index < tests.length) {
+                await tests[index].fn();
+            }
+        }
+
+        async function runAllTests() {
+            document.getElementById('test-results').innerHTML = '';
+            passCount = failCount = skipCount = 0;
+
+            for (let i = 0; i < tests.length; i++) {
+                await runTest(i);
+            }
+        }
+
+        function executeManual() {
+            const input = document.getElementById('manual-input');
+            const output = document.getElementById('manual-output');
+            const command = input.value.trim();
+
+            if (!command) return;
+
+            output.textContent = `执行命令: ${command} (请在上方iframe中查看结果)`;
+            input.value = '';
+            input.focus();
+        }
+
+        // 自动运行基本页面测试
+        setTimeout(() => {
+            runTest(0);
+        }, 1500);
+    </script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bug修复测试 - F1几何图形生成器</title>
+</head>
+<body>
+    <h1>Bug修复测试 - F1几何图形生成器</h1>
+    <div id="output"></div>
+
+    <!-- 加载F1应用的所有JS文件 -->
+    <script src="js/points.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/shapes.js"></script>
+    <script src="js/functions.js"></script>
+    <script src="js/commands.js"></script>
+    <script src="js/autocomplete.js"></script>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message) {
+            output.innerHTML += '<div>' + message + '</div>';
+            console.log(message);
+        }
+
+        function runTests() {
+            log('<hr>');
+            log('<h2>测试Bug #1：删除撤销不完整</h2>');
+            
+            // 重置状态
+            for (let key in points) delete points[key];
+            labeledPoints.clear();
+            shapes.length = 0;
+            commandHistory.length = 0;
+            redoStack.length = 0;
+            
+            log('初始化：重置所有状态');
+            log(`  points: ${Object.keys(points).length}, shapes: ${shapes.length}`);
+            
+            // 绘制矩形
+            if (typeof executeCommand === 'function') {
+                executeCommand('矩形abcd');
+                log(`1. 绘制矩形abcd后 shapes.length = ${shapes.length}，shapes[0].name = ${shapes[0] ? shapes[0].name : 'undefined'}`);
+                
+                // 删除矩形
+                executeCommand('删除 矩形abcd');
+                log(`2. 删除矩形后 shapes.length = ${shapes.length}`);
+                
+                // 撤销删除
+                executeCommand('撤销');
+                log(`3. 撤销删除后 shapes.length = ${shapes.length}，shapes[0].name = ${shapes[0] ? shapes[0].name : 'undefined'}`);
+                
+                // 检查Bug #1是否修复
+                if (shapes.length === 1 && shapes[0].name === 'abcd') {
+                    log('<span style="color:green">✅ Bug #1 修复成功：撤销后shapes数组正确恢复</span>');
+                } else {
+                    log(`<span style="color:red">❌ Bug #1 未修复：撤销后shapes数组状态错误（期望 shapes.length=1, name='abcd'，实际 shapes.length=${shapes.length}, name=${shapes[0] ? shapes[0].name : 'undefined'}）</span>`);
+                }
+            } else {
+                log('<span style="color:red">❌ executeCommand函数未定义</span>');
+            }
+
+            log('<hr>');
+            log('<h2>测试Bug #2：清除未清空shapes</h2>');
+            
+            // 重置状态
+            for (let key in points) delete points[key];
+            labeledPoints.clear();
+            shapes.length = 0;
+            commandHistory.length = 0;
+            redoStack.length = 0;
+            
+            if (typeof executeCommand === 'function') {
+                // 绘制多个图形
+                executeCommand('矩形abcd');
+                executeCommand('三角形abc');
+                log(`4. 绘制矩形和三角形后 shapes.length = ${shapes.length}`);
+                
+                // 清空
+                executeCommand('清空');
+                log(`5. 清空后 shapes.length = ${shapes.length}`);
+                
+                // 检查Bug #2是否修复
+                if (shapes.length === 0) {
+                    log('<span style="color:green">✅ Bug #2 修复成功：清空后shapes数组被清空</span>');
+                } else {
+                    log(`<span style="color:red">❌ Bug #2 未修复：清空后shapes数组仍有 ${shapes.length} 个元素</span>`);
+                }
+            } else {
+                log('<span style="color:red">❌ executeCommand函数未定义</span>');
+            }
+
+            log('<hr>');
+            log('<h2>测试Bug #3：清除恢复不一致</h2>');
+            
+            // 重置状态
+            for (let key in points) delete points[key];
+            labeledPoints.clear();
+            shapes.length = 0;
+            commandHistory.length = 0;
+            redoStack.length = 0;
+            
+            if (typeof executeCommand === 'function') {
+                // 绘制矩形A
+                executeCommand('矩形abcd');
+                log(`6. 绘制矩形abcd后 shapes.length = ${shapes.length}，shapes[0].name = ${shapes[0] ? shapes[0].name : 'undefined'}`);
+                
+                // 清空
+                executeCommand('清空');
+                log(`7. 清空后 shapes.length = ${shapes.length}`);
+                
+                // 绘制新图形
+                executeCommand('三角形efg');
+                log(`8. 绘制新三角形后 shapes.length = ${shapes.length}，shapes[0].name = ${shapes[0] ? shapes[0].name : 'undefined'}`);
+                
+                // 撤销清空
+                executeCommand('撤销');
+                log(`9. 撤销清空后 shapes.length = ${shapes.length}，shapes[0].name = ${shapes[0] ? shapes[0].name : 'undefined'}`);
+                
+                // 检查Bug #是否修复
+                if (shapes.length === 1 && shapes[0].name === 'abcd') {
+                    log('<span style="color:green">✅ Bug #3 修复成功：撤销清空后正确恢复到矩形abcd</span>');
+                } else {
+                    log(`<span style="color:red">❌ Bug #3 未修复：撤销清空后shapes数组状态错误（期望 shapes.length=1, name='abcd'，实际 shapes.length=${shapes.length}, name=${shapes[0] ? shapes[0].name : 'undefined'}）</span>`);
+                }
+            } else {
+                log('<span style="color:red">❌ executeCommand函数未定义</span>');
+            }
+
+            log('<hr>');
+            log('<h2>测试完成</h2>');
+        }
+
+        // 延迟执行，确保所有JS文件加载完成
+        window.addEventListener('load', () => {
+            log('开始测试...');
+            log(`executeCommand存在: ${typeof executeCommand !== 'undefined'}`);
+            log(`points存在: ${typeof points !== 'undefined'}`);
+            log(`shapes存在: ${typeof shapes !== 'undefined'}`);
+            log(`commandHistory存在: ${typeof commandHistory !== 'undefined'}`);
+            log(`redoStack存在: ${typeof redoStack !== 'undefined'}`);
+            setTimeout(runTests, 500);
+        });
+    </script>
+</body>
+</html>

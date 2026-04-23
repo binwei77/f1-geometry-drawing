@@ -229,89 +229,40 @@ function hideAutocompletePopup() {
 function getDeletableObjects() {
     const objects = [];
     
-    // 通过window访问全局变量
     const pts = window.points || {};
-    
-    // 获取所有非变换生成的点
-    const pointNames = Object.keys(pts).filter(name => !name.includes("'")).sort();
+    const sList = window.shapeList || [];
     
     // 跟踪哪些点已被图形使用
     const usedPoints = new Set();
     
-    // 按字母表排序后形成连续的字符串
-    const nameString = pointNames.join('');
+    // 从 shapeList（单一数据源）读取所有图形
+    const typeMap = {
+        'rectangle': '矩形',
+        'triangle': '三角形',
+        'segment': '线段',
+        'circle': '圆',
+        'angle': '角',
+        'line': '直线',
+        'function': '函数'
+    };
     
-    // 识别矩形（4个连续字母）
-    for (let i = 0; i < nameString.length - 3; i++) {
-        const rectName = nameString.substring(i, i + 4);
-        const allExist = rectName.split('').every(n => pts[n]);
-        if (allExist) {
-            objects.push({
-                type: '矩形',
-                name: '矩形' + rectName,
-                displayName: '矩形' + rectName
-            });
-            // 标记这些点已被使用
-            rectName.split('').forEach(p => usedPoints.add(p));
-            break; // 找到一个矩形后跳出
-        }
-    }
-    
-    // 识别三角形（3个连续字母）- 需要检查是否已被矩形使用
-    for (let i = 0; i < nameString.length - 2; i++) {
-        const triName = nameString.substring(i, i + 3);
-        const allExist = triName.split('').every(n => pts[n]);
-        // 检查这三个点是否都已被矩形使用
-        const allUsed = triName.split('').every(n => usedPoints.has(n));
-        if (allExist && !allUsed) {
-            objects.push({
-                type: '三角形',
-                name: '三角形' + triName,
-                displayName: '三角形' + triName
-            });
-            // 标记这些点已被使用
-            triName.split('').forEach(p => usedPoints.add(p));
-            break; // 找到一个三角形后跳出
-        }
-    }
-    
-    // 识别线段（2个连续字母）- 需要检查是否已被矩形或三角形使用
-    for (let i = 0; i < nameString.length - 1; i++) {
-        const segName = nameString.substring(i, i + 2);
-        const allExist = segName.split('').every(n => pts[n]);
-        // 检查这两个点是否都已被使用
-        const allUsed = segName.split('').every(n => usedPoints.has(n));
-        if (allExist && !allUsed) {
-            objects.push({
-                type: '线段',
-                name: segName,
-                displayName: '线段' + segName
-            });
-            // 标记这些点已被使用
-            segName.split('').forEach(p => usedPoints.add(p));
-            break; // 找到一个线段后跳出
-        }
-    }
-    
-    // 识别圆（通过检查window.shapes）
-    const shapes = window.shapes || [];
-    shapes.forEach(shape => {
-        if (shape.type === 'circle' && shape.name.startsWith('圆')) {
-            // 圆的名称是"圆O"，圆心是O
-            const centerName = shape.name.substring(1); // 去掉"圆"字
-            if (!usedPoints.has(centerName)) {
-                objects.push({
-                    type: '圆',
-                    name: shape.name,
-                    displayName: shape.name
-                });
-                // 标记圆心已被使用
-                usedPoints.add(centerName);
-            }
+    sList.forEach(entry => {
+        const shape = entry.data && entry.data.shape;
+        if (!shape) return;
+        const displayType = typeMap[shape.type] || shape.type;
+        objects.push({
+            type: displayType,
+            name: shape.name,
+            displayName: (displayType + shape.name).replace(/^(矩形|三角形|线段|圆|角|直线|函数)(矩形|三角形|线段|圆|角|直线|函数)/, '$2')
+        });
+        // 标记该图形使用的点
+        if (shape.pointNames) {
+            shape.pointNames.forEach(p => usedPoints.add(p));
         }
     });
     
     // 只显示不属于任何图形的孤立点
+    const pointNames = Object.keys(pts).filter(name => !name.includes("'")).sort();
     pointNames.forEach(pointName => {
         if (!usedPoints.has(pointName)) {
             objects.push({

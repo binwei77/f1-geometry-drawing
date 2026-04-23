@@ -594,6 +594,17 @@ function drawIntersections(intersections, desc) {
             fill: false
         };
         shapes.push(shape);
+        // 同步到shapeList
+        if (window.shapeList) {
+            window.shapeList.push({
+                id: Date.now() + '_pt_' + name,
+                type: 'point',
+                name: name,
+                points: [name],
+                data: { shape: shape, points: [name], type: 'point', color: 'red', fill: false },
+                createdAt: Date.now()
+            });
+        }
         
         // 绘制点
         drawPoint(point, 'red');

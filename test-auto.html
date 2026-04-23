@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>F1自动化测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background: #d4edda; border-color: #c3e6cb; }
+        .fail { background: #f8d7da; border-color: #f5c6cb; }
+        .pending { background: #fff3cd; border-color: #ffeeba; }
+        iframe { width: 100%; height: 600px; border: 2px solid #333; margin-top: 20px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #log { background: #f5f5f5; padding: 10px; margin-top: 20px; height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>F1几何绘图 - 自动化测试</h1>
+
+    <div id="tests">
+        <h2>测试用例</h2>
+        <div id="test-list"></div>
+    </div>
+
+    <div>
+        <h2>控制</h2>
+        <button onclick="startTest()">开始测试</button>
+        <button onclick="resetTest()">重置</button>
+    </div>
+
+    <div id="log">
+        <h3>测试日志</h3>
+        <div id="log-content"></div>
+    </div>
+
+    <iframe id="f1-frame" src="http://39.106.26.127/f1/"></iframe>
+
+    <script>
+        const tests = [
+            { name: '清空画布', command: '清空', expected: '画布清空' },
+            { name: '绘制矩形', command: '矩形abcd', expected: '显示矩形ABCD' },
+            { name: '绘制中点', command: '中点 a b e', expected: '创建中点E' },
+            { name: '绘制三角形', command: '三角形ace', expected: '显示三角形ACE' },
+            { name: '设置颜色', command: '颜色为红', expected: '颜色变为红色' },
+            { name: '绘制圆', command: '圆 e ab', expected: '显示圆心E，半径AB' },
+            { name: '撤销操作', command: '撤销', expected: '撤销上一个操作' },
+            { name: '重做操作', command: '重做', expected: '恢复上一个操作' },
+            { name: '帮助命令', command: '帮助', expected: '显示帮助信息' }
+        ];
+
+        let currentTest = 0;
+        let testResults = [];
+
+        function initTests() {
+            const list = document.getElementById('test-list');
+            tests.forEach((test, index) => {
+                const div = document.createElement('div');
+                div.id = `test-${index}`;
+                div.className = 'test pending';
+                div.innerHTML = `
+                    <strong>${index + 1}. ${test.name}</strong><br>
+                    命令: <code>${test.command}</code><br>
+                    预期: ${test.expected}<br>
+                    状态: <span class="status">待测试</span>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function log(message) {
+            const logContent = document.getElementById('log-content');
+            const time = new Date().toLocaleTimeString();
+            logContent.innerHTML += `[${time}] ${message}<br>`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        async function executeCommand(command) {
+            const frame = document.getElementById('f1-frame');
+            try {
+                // 等待frame加载
+                if (!frame.contentWindow || !frame.contentWindow.document) {
+                    await new Promise(resolve => {
+                        frame.onload = resolve;
+                        setTimeout(resolve, 1000);
+                    });
+                }
+
+                const input = frame.contentWindow.document.getElementById('commandInput');
+                if (input) {
+                    input.value = command;
+                    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+                    input.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter' }));
+                    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                log(`错误: ${e.message}`);
+                return false;
+            }
+        }
+
+        async function runTest(test, index) {
+            log(`开始测试: ${test.name}`);
+            log(`执行命令: ${test.command}`);
+
+            const success = await executeCommand(test.command);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            const testDiv = document.getElementById(`test-${index}`);
+            const statusSpan = testDiv.querySelector('.status');
+
+            if (success) {
+                testDiv.className = 'test pass';
+                statusSpan.textContent = '通过';
+                testResults.push({ ...test, result: '通过' });
+                log(`测试通过: ${test.name}`);
+            } else {
+                testDiv.className = 'test fail';
+                statusSpan.textContent = '失败';
+                testResults.push({ ...test, result: '失败' });
+                log(`测试失败: ${test.name}`);
+            }
+        }
+
+        async function startTest() {
+            if (currentTest >= tests.length) {
+                log('所有测试完成！');
+                showSummary();
+                return;
+            }
+
+            const test = tests[currentTest];
+            await runTest(test, currentTest);
+
+            currentTest++;
+            setTimeout(startTest, 500);
+        }
+
+        function resetTest() {
+            currentTest = 0;
+            testResults = [];
+            document.getElementById('test-list').innerHTML = '';
+            document.getElementById('log-content').innerHTML = '';
+            initTests();
+            log('测试已重置');
+        }
+
+        function showSummary() {
+            const passed = testResults.filter(t => t.result === '通过').length;
+            const failed = testResults.filter(t => t.result === '失败').length;
+            log(`=== 测试摘要 ===`);
+            log(`总测试数: ${testResults.length}`);
+            log(`通过: ${passed}`);
+            log(`失败: ${failed}`);
+            log(`成功率: ${(passed / testResults.length * 100).toFixed(2)}%`);
+        }
+
+        // 初始化
+        initTests();
+        log('测试环境已就绪');
+    </script>
+</body>
+</html>
