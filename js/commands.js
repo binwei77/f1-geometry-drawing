@@ -74,12 +74,24 @@ function removeShapeFromList(shapeId) {
  * @returns {Array} 被删除的图形ID数组
  */
 function removeShapesByType(type) {
-    const toRemove = shapeList.filter(s => s.type === type);
+    // 中文类型到英文类型的映射
+    const typeMap = {
+        '矩形': 'rectangle', '长方形': 'rectangle',
+        '三角形': 'triangle',
+        '圆': 'circle',
+        '线段': 'segment', '直线': 'line',
+        '角': 'angle',
+        '中点': 'midpoint', '分点': 'division',
+        '旋转': 'rotate', '对称': 'reflect', '对折': 'fold', '平移': 'translate'
+    };
+    const targetType = typeMap[type] || type;  // 如果已经是英文类型则直接使用
+    
+    const toRemove = shapeList.filter(s => s.type === targetType);
     const ids = toRemove.map(s => s.id);
 
     // 从列表中移除，同时从shapes数组中删除
     for (let i = shapeList.length - 1; i >= 0; i--) {
-        if (shapeList[i].type === type) {
+        if (shapeList[i].type === targetType) {
             const removed = shapeList.splice(i, 1)[0];
             // 同步从shapes数组中删除
             if (removed && removed.data && removed.data.shape) {
@@ -211,11 +223,23 @@ function parseByPattern(str, pattern) {
         // 跳过空格
         while (i < str.length && /\s/.test(str[i])) i++;
     } else {
-        // 不拆分点名称，读取整个参数
+        // 不拆分点名称，读取整个参数（包括括号内的坐标）
         let param = '';
         while (i < str.length && /[A-Za-z0-9]/.test(str[i])) {
             param += str[i];
             i++;
+        }
+        // 如果紧跟括号（如O(400,300)），将括号内容一起读取
+        if (i < str.length && str[i] === '(') {
+            const start = i;
+            let depth = 0;
+            while (i < str.length) {
+                if (str[i] === '(') depth++;
+                if (str[i] === ')') depth--;
+                param += str[i];
+                i++;
+                if (depth === 0) break;
+            }
         }
         if (param) result.push(param);
         
@@ -307,7 +331,7 @@ function smartSplitParameters(remaining, commandType) {
  * @param {boolean} fill - 是否填充
  * @returns {Object} 图形对象
  */
-function createShape(type, name, pointNames, color, fill = false) {
+function createShape(type, name, pointNames, color, fill = false, extraProps = {}) {
     // 收集所有点的坐标信息
     const pointsData = [];
     pointNames.forEach(pName => {
@@ -329,7 +353,8 @@ function createShape(type, name, pointNames, color, fill = false) {
             name: name,
             pointNames: pointNames,
             color: color,
-            fill: fill
+            fill: fill,
+            ...extraProps
         };
         shapes[existingIndex] = shape;
         console.log(`已更新图形 ${name}`);
@@ -347,7 +372,8 @@ function createShape(type, name, pointNames, color, fill = false) {
                     points: pointsData,
                     type: type,
                     color: color,
-                    fill: fill
+                    fill: fill,
+                    ...extraProps
                 },
                 createdAt: shapeList[shapeListIndex].createdAt
             };
@@ -362,7 +388,8 @@ function createShape(type, name, pointNames, color, fill = false) {
         name: name,
         pointNames: pointNames,
         color: color,
-        fill: fill
+        fill: fill,
+        ...extraProps
     };
     // shapes.push(shape) 已由 addShapeToList 同步
     console.log(`已创建图形 ${name} (${type})`);
@@ -373,7 +400,8 @@ function createShape(type, name, pointNames, color, fill = false) {
         points: pointsData,
         type: type,
         color: color,
-        fill: fill
+        fill: fill,
+        ...extraProps
     });
     
     return shape;
@@ -794,6 +822,7 @@ function executeCommand(cmd, skipHistory = false) {
             // 使用已存在的点绘制角
             const anglePoints = allPointNames.map(name => points[name]);
             drawAngle(anglePoints[0], anglePoints[1], anglePoints[2], color);
+            createShape('angle', allPointNames.join(''), allPointNames, color, false);
         } else if (hasCoordinates) {
             // 使用坐标绘制角
             if (pointArgs.length >= 3) {
@@ -802,6 +831,10 @@ function executeCommand(cmd, skipHistory = false) {
                 const p3 = parsePoint(pointArgs[2]);
                 if (p1 && p2 && p3) {
                     drawAngle(p1, p2, p3, color);
+                    const anglePointNames = [p1.name, p2.name, p3.name].filter(n => n);
+                    if (anglePointNames.length >= 3) {
+                        createShape('angle', anglePointNames.join(''), anglePointNames, color, false);
+                    }
                 } else {
                     console.log('请提供3个有效的点的坐标');
                 }
@@ -812,6 +845,7 @@ function executeCommand(cmd, skipHistory = false) {
             // 提供了点名称但点不存在，自动生成这些点
             const anglePoints = autoAngle(allPointNames);
             drawAngle(anglePoints[0], anglePoints[1], anglePoints[2], color);
+            createShape('angle', allPointNames.join(''), allPointNames, color, false);
         } else {
             console.log('请输入3个点的名称，如：角abc');
         }
@@ -869,15 +903,19 @@ function executeCommand(cmd, skipHistory = false) {
         }
         
         if (center && radius > 0) {
+            // 确保圆心点已保存到points对象（parsePoint可能已保存，但这里确保不遗漏）
+            if (center.name && !points[center.name]) {
+                points[center.name] = center;
+            }
             console.log('[DEBUG圆] 调用drawCircle center=' + JSON.stringify(center) + ' radius=' + radius + ' color=' + color);
             drawCircle(center, radius, color, needsFill);
             if (centerName) {
-                createShape('circle', '圆' + centerName, [centerName], color, needsFill);
+                createShape('circle', '圆' + centerName, [centerName], color, needsFill, {radius: radius});
             } else {
                 // 当parsePoint返回了点对象但没有设置centerName时，从center.name获取
                 const name = center.name || '';
                 if (name) {
-                    createShape('circle', '圆' + name, [name], color, needsFill);
+                    createShape('circle', '圆' + name, [name], color, needsFill, {radius: radius});
                 }
             }
             console.log('已创建图形 圆' + (centerName || center.name || '') + ' (circle)');
@@ -1124,7 +1162,12 @@ function executeCommand(cmd, skipHistory = false) {
     }
     else if (type === '旋转') {
         // 格式：旋转 三角形abc 绕o 45
-        const shapeName = parts[1];
+        let shapeName = parts[1];
+        // 去掉类型前缀，只保留点名称部分
+        const typePrefixes = ['三角形', '矩形', '长方形'];
+        for (const pfx of typePrefixes) {
+            if (shapeName.startsWith(pfx)) { shapeName = shapeName.substring(pfx.length); break; }
+        }
         let center = null;
         let angle = 0;
         
@@ -1134,6 +1177,10 @@ function executeCommand(cmd, skipHistory = false) {
             } else if (parts[i] === '绕') {
                 // 可能圆心是坐标形式
                 center = parsePoint(parts[i + 1]);
+            } else if (parts[i].startsWith('绕')) {
+                // 粘合格式：绕e → 中心点为e
+                const centerName = parts[i].substring(1);
+                center = points[centerName] || parsePoint(centerName);
             } else if (!isNaN(parseFloat(parts[i]))) {
                 angle = parseFloat(parts[i]);
             }
@@ -1196,17 +1243,31 @@ function executeCommand(cmd, skipHistory = false) {
     }
     else if (type === '对称' || type === '对折') {
         // 格式：对称 三角形abc 关于直线l
-        const shapeName = parts[1];
+        let shapeName = parts[1];
+        // 去掉类型前缀，只保留点名称部分
+        const typePrefixes = ['三角形', '矩形', '长方形'];
+        for (const pfx of typePrefixes) {
+            if (shapeName.startsWith(pfx)) { shapeName = shapeName.substring(pfx.length); break; }
+        }
         let linePoint1 = null;
         let linePoint2 = null;
         
         for (let i = 2; i < parts.length; i++) {
             if (parts[i] === '关于' && i + 1 < parts.length) {
                 const lineRef = parts[i + 1];
-                // 检查是否是线段名称（如"ab"）
-                if (lineRef.length === 2) {
-                    linePoint1 = points[lineRef[0]];
-                    linePoint2 = points[lineRef[1]];
+                // 去掉"直线"前缀
+                const ref = lineRef.startsWith('直线') ? lineRef.substring(2) : lineRef;
+                if (ref.length === 2) {
+                    linePoint1 = points[ref[0]];
+                    linePoint2 = points[ref[1]];
+                }
+            } else if (parts[i].startsWith('关于')) {
+                // 粘合格式：关于直线ab 或 关于ab
+                const rest = parts[i].substring(2);
+                const ref = rest.startsWith('直线') ? rest.substring(2) : rest;
+                if (ref.length === 2) {
+                    linePoint1 = points[ref[0]];
+                    linePoint2 = points[ref[1]];
                 }
             }
         }
@@ -1266,18 +1327,41 @@ function executeCommand(cmd, skipHistory = false) {
     }
     else if (type === '平移') {
         // 格式：平移 三角形abc 使a到m
-        const shapeName = parts[1];
+        let shapeName = parts[1];
+        // 去掉类型前缀，只保留点名称部分
+        const typePrefixes = ['三角形', '矩形', '长方形'];
+        for (const pfx of typePrefixes) {
+            if (shapeName.startsWith(pfx)) { shapeName = shapeName.substring(pfx.length); break; }
+        }
         let refPoint = null;  // 参考点
         let targetPoint = null;  // 目标点
         
         for (let i = 2; i < parts.length; i++) {
-            if (parts[i] === '使') {
+            if (parts[i] === '使' && i + 1 < parts.length) {
                 refPoint = points[parts[i + 1]];
+            } else if (parts[i].startsWith('使')) {
+                // 粘合格式：使a到m → 需要解析"使a"和后续"到m"
+                const afterShi = parts[i].substring(1);
+                if (afterShi.length >= 1) {
+                    // 提取参考点名（第一个字符）
+                    const toIdx = afterShi.indexOf('到');
+                    if (toIdx > 0) {
+                        refPoint = points[afterShi.substring(0, toIdx)];
+                        const targetName = afterShi.substring(toIdx + 1);
+                        targetPoint = points[targetName] || parsePoint(targetName);
+                    } else {
+                        refPoint = points[afterShi];
+                    }
+                }
             } else if (parts[i] === '到' && i + 1 < parts.length) {
                 targetPoint = points[parts[i + 1]];
                 if (!targetPoint) {
                     targetPoint = parsePoint(parts[i + 1]);
                 }
+            } else if (parts[i].startsWith('到')) {
+                // 粘合格式：到m
+                const targetName = parts[i].substring(1);
+                targetPoint = points[targetName] || parsePoint(targetName);
             }
         }
         
@@ -1345,26 +1429,44 @@ function executeCommand(cmd, skipHistory = false) {
         let anglePoint3 = null;  // 角的点3
         let targetAngle = 0;
         
+        // 第一个参数始终是要移动的点
+        if (parts[1] && parts[1].length <= 2) {
+            pointToMove = parts[1];
+        }
+        
         for (let i = 1; i < parts.length; i++) {
-            if (parts[i] === '使' || parts[i] === '令') {
-                // 下一个是要移动的点
-                if (i + 1 < parts.length && parts[i + 1].length === 1) {
-                    pointToMove = parts[i + 1];
-                }
-            } else if (parts[i].includes('角') && parts[i].length >= 4) {
-                // 解析角名称，如"角abc"
-                const angleStr = parts[i];
-                if (angleStr.startsWith('角')) {
-                    const angleName = angleStr.substring(1);
-                    if (angleName.length === 3) {
-                        anglePoint1 = angleName[0];
-                        angleVertex = angleName[1];
-                        anglePoint3 = angleName[2];
+            let token = parts[i];
+            
+            // 处理粘合格式：使角abc=90 → 去掉"使"前缀，解析"角abc=90"
+            if (token.startsWith('使') || token.startsWith('令')) {
+                token = token.substring(1);
+            }
+            
+            if (token.includes('角') && token.length >= 4) {
+                // 解析角名称，如"角abc"或"角abc=90"
+                const angleStr = token.startsWith('角') ? token : null;
+                if (angleStr) {
+                    const nameAndValue = angleStr.substring(1); // 去掉"角"
+                    const eqIdx = nameAndValue.indexOf('=');
+                    if (eqIdx > 0) {
+                        // "abc=90" 格式
+                        const namePart = nameAndValue.substring(0, eqIdx);
+                        if (namePart.length === 3) {
+                            anglePoint1 = namePart[0];
+                            angleVertex = namePart[1];
+                            anglePoint3 = namePart[2];
+                        }
+                        targetAngle = parseFloat(nameAndValue.substring(eqIdx + 1));
+                    } else if (nameAndValue.length === 3) {
+                        // "abc" 格式，角度值在下一个token
+                        anglePoint1 = nameAndValue[0];
+                        angleVertex = nameAndValue[1];
+                        anglePoint3 = nameAndValue[2];
                     }
                 }
-            } else if (parts[i].includes('=')) {
-                // 解析目标角度，如"=90"
-                const angleStr = parts[i].split('=')[1];
+            } else if (token.includes('=')) {
+                // 独立的 "=90" 格式
+                const angleStr = token.split('=')[1];
                 targetAngle = parseFloat(angleStr);
             }
         }
@@ -1749,11 +1851,7 @@ function executeCommand(cmd, skipHistory = false) {
         });
     }
     else if (type === '清空' || type === '清除') {
-        if (isRedo) {
-            return;
-        }
-        
-        // 只有在非重做且非重绘情况下，才将清除状态存储在命令历史中
+        // 只有在非重绘情况下，才将清除状态存储在命令历史中
         if (!skipHistory && commandHistory.length > 0) {
             // 保存清除前的状态用于撤销（包括shapes和shapeList）
             const clearedState = {
@@ -1765,7 +1863,7 @@ function executeCommand(cmd, skipHistory = false) {
             
             // 更新commandHistory中的最后一个命令
             commandHistory[commandHistory.length - 1] = {
-                cmd: fullCommand,
+                cmd: cmd,
                 clearedState: clearedState
             };
         }
@@ -2077,18 +2175,22 @@ function redrawShape(shape) {
     const shapeData = shape.data.shape;
     shapes.push(shapeData);
     
+    // 根据pointNames从points对象中构建坐标数组
+    const pn = shapeData.pointNames || [];
+    const pts = pn.map(n => points[n]).filter(Boolean);
+    
     // 重绘
-    if (shapeData.type === 'line') {
-        drawLine(shapeData.start, shapeData.end, shapeData.color, false);
+    if (shapeData.type === 'line' || shapeData.type === 'segment') {
+        if (pts.length >= 2) drawLine(pts, shapeData.color);
     } else if (shapeData.type === 'rectangle') {
-        drawRectangle(shapeData.points, shapeData.color, shapeData.fill);
+        if (pts.length >= 4) drawRectangle(pts, shapeData.color, shapeData.fill);
     } else if (shapeData.type === 'circle') {
-        drawCircle(shapeData.center, shapeData.radius, shapeData.color, false);
+        if (pts.length >= 1 && shapeData.radius) {
+            drawCircle(pts[0], shapeData.radius, shapeData.color, shapeData.fill);
+        }
     } else if (shapeData.type === 'triangle') {
-        drawTriangle(shapeData.points, shapeData.color, shapeData.fill);
+        if (pts.length >= 3) drawTriangle(pts, shapeData.color, shapeData.fill);
     } else if (shapeData.type === 'angle') {
-        drawAngle(shapeData.start, shapeData.vertex, shapeData.end, shapeData.color);
-    } else if (shapeData.type === 'segment') {
-        drawLine(shapeData.start, shapeData.end, shapeData.color, false);
+        if (pts.length >= 3) drawAngle(pts[0], pts[1], pts[2], shapeData.color);
     }
 }
