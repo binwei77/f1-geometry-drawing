@@ -243,6 +243,7 @@ function getDeletableObjects() {
         'circle': '圆',
         'angle': '角',
         'line': '直线',
+        'point': '点',
         'function': '函数'
     };
     
@@ -253,7 +254,7 @@ function getDeletableObjects() {
         objects.push({
             type: displayType,
             name: shape.name,
-            displayName: (displayType + shape.name).replace(/^(矩形|三角形|线段|圆|角|直线|函数)(矩形|三角形|线段|圆|角|直线|函数)/, '$2')
+            displayName: shape.name
         });
         // 标记该图形使用的点
         if (shape.pointNames) {
