@@ -44,10 +44,9 @@ const commandsList = [
         category: '函数曲线',
         commands: [
             { name: '坐标系', example: '坐标系', hint: '无参数' },
-            { name: '正比例', example: '正比例 1', hint: '系数k（如1表示y=x）' },
-            { name: '反比例', example: '反比例 1', hint: '系数k（如1表示y=1/x）' },
-            { name: '二次函数', example: '二次函数 1 0 0', hint: '系数a b c（y=ax²+bx+c）' },
-            { name: '函数', example: '函数一次 1 0', hint: '类型 系数...' }
+            { name: '一次函数', example: '一次函数', hint: '斜率k 截距b（y=kx+b）' },
+            { name: '反比例', example: '反比例', hint: '系数k 常数b（y=k/x+b）' },
+            { name: '二次函数', example: '二次函数', hint: '系数a b c（y=ax²+bx+c）' }
         ]
     },
     {
@@ -135,6 +134,19 @@ const guidedCommands = {
             { name: '长度', displayName: '长度', insertText: '长度' },
             { name: '全等', displayName: '全等 ≅', insertText: '全等' }
         ], suffix: ' ' }
+    ],
+    '一次函数': [
+        { key: 'k', label: '斜率k', type: 'input', prefix: '', suffix: ' ', placeholder: '如1或-2' },
+        { key: 'b', label: '截距b', type: 'input', prefix: '', suffix: '', placeholder: '如0或3' }
+    ],
+    '反比例': [
+        { key: 'k', label: '系数k', type: 'input', prefix: '', suffix: ' ', placeholder: '如1或-2' },
+        { key: 'b', label: '常数b', type: 'input', prefix: '', suffix: '', placeholder: '如0或3' }
+    ],
+    '二次函数': [
+        { key: 'a', label: '二次项系数a', type: 'input', prefix: '', suffix: ' ', placeholder: '如1或-1' },
+        { key: 'b', label: '一次项系数b', type: 'input', prefix: '', suffix: ' ', placeholder: '如0或2' },
+        { key: 'c', label: '常数项c', type: 'input', prefix: '', suffix: '', placeholder: '如0或3' }
     ]
 };
 

@@ -82,7 +82,7 @@ function removeShapesByType(type) {
         '线段': 'segment', '直线': 'line',
         '角': 'angle',
         '中点': 'midpoint', '分点': 'division',
-        '函数': 'function',
+        '函数': 'function', '一次函数': 'function', '反比例': 'function', '二次函数': 'function',
         '旋转': 'rotate', '对称': 'reflect', '对折': 'fold', '平移': 'translate'
     };
     const targetType = typeMap[type] || type;  // 如果已经是英文类型则直接使用
@@ -630,7 +630,7 @@ function executeCommand(cmd, skipHistory = false) {
     let type = '';
     let remaining = '';
     
-    const typeKeywords = ['矩形', '长方形', '直线', '线段', '角', '圆', '点', '中点', '分点', '三角形', '坐标系', '正比例', '反比例', '二次函数', '函数', '旋转', '对称', '对折', '平移', '移动', '标注', '交点', '清空', '清除', '删除', 'remove', 'del'];
+    const typeKeywords = ['矩形', '长方形', '直线', '线段', '角', '圆', '点', '中点', '分点', '三角形', '坐标系', '一次函数', '反比例', '二次函数', '旋转', '对称', '对折', '平移', '移动', '标注', '交点', '清空', '清除', '删除', 'remove', 'del'];
     for (const keyword of typeKeywords) {
         if (cmd.startsWith(keyword)) {
             type = keyword;
@@ -1103,38 +1103,44 @@ function executeCommand(cmd, skipHistory = false) {
         }
         drawMathAxis(axisColor);
     }
-    else if (type === '正比例') {
-        let k = 1;
+    else if (type === '一次函数') {
+        let k = 1, b = 0;
         let funcColor = color;
+        let paramIndex = 0;
         for (let i = 1; i < parts.length; i++) {
             if (colorMap[parts[i]]) {
                 funcColor = colorMap[parts[i]];
             } else if (!isNaN(parseFloat(parts[i]))) {
-                k = parseFloat(parts[i]);
+                if (paramIndex === 0) k = parseFloat(parts[i]);
+                else if (paramIndex === 1) b = parseFloat(parts[i]);
+                paramIndex++;
             }
         }
-        drawLinear(k, funcColor);
+        drawLinear(k, b, funcColor);
         // 记录到shapeList
-        addShapeToList('function', '正比例y=' + k + 'x', [], {
-            shape: { type: 'function', subType: 'linear', k: k, color: funcColor, name: '正比例y=' + k + 'x' },
+        addShapeToList('function', '一次y=' + k + 'x+' + b, [], {
+            shape: { type: 'function', subType: 'linear', k: k, b: b, color: funcColor, name: '一次y=' + k + 'x+' + b },
             points: [],
             type: 'function'
         });
     }
     else if (type === '反比例') {
-        let k = 1;
+        let k = 1, b = 0;
         let funcColor = color;
+        let paramIndex = 0;
         for (let i = 1; i < parts.length; i++) {
             if (colorMap[parts[i]]) {
                 funcColor = colorMap[parts[i]];
             } else if (!isNaN(parseFloat(parts[i]))) {
-                k = parseFloat(parts[i]);
+                if (paramIndex === 0) k = parseFloat(parts[i]);
+                else if (paramIndex === 1) b = parseFloat(parts[i]);
+                paramIndex++;
             }
         }
-        drawInverse(k, funcColor);
+        drawInverse(k, b, funcColor);
         // 记录到shapeList
-        addShapeToList('function', '反比例y=' + k + '/x', [], {
-            shape: { type: 'function', subType: 'inverse', k: k, color: funcColor, name: '反比例y=' + k + '/x' },
+        addShapeToList('function', '反比例y=' + k + '/x+' + b, [], {
+            shape: { type: 'function', subType: 'inverse', k: k, b: b, color: funcColor, name: '反比例y=' + k + '/x+' + b },
             points: [],
             type: 'function'
         });
@@ -1160,69 +1166,6 @@ function executeCommand(cmd, skipHistory = false) {
             points: [],
             type: 'function'
         });
-    }
-    else if (type === '函数') {
-        // 支持两种格式：
-        // 1. 函数 y=ax+b (一次函数)
-        // 2. 函数一次 a b
-        // 3. 函数 y=ax²+bx+c (二次函数)
-        // 4. 函数二次 a b c
-        
-        let funcType = remaining.split(/\s+/)[0] || '';
-        let a = 1, b = 0, c = 0;
-        let funcColor = color;
-        
-        if (funcType === '一次' || remaining.includes('y=')) {
-            // 一次函数
-            for (let i = 1; i < parts.length; i++) {
-                if (parts[i] === '一次') continue;
-                if (colorMap[parts[i]]) {
-                    funcColor = colorMap[parts[i]];
-                } else if (!isNaN(parseFloat(parts[i]))) {
-                    if (a === 1 && b === 0) {
-                        a = parseFloat(parts[i]);
-                    } else {
-                        b = parseFloat(parts[i]);
-                    }
-                }
-            }
-            drawLinear(a, b, funcColor);
-            // 保存函数信息
-            const funcName = 'F' + (Object.keys(functions).length + 1);
-            functions[funcName] = { type: 'linear', a, b, color: funcColor };
-            // 记录到shapeList
-            addShapeToList('function', '一次y=' + a + 'x+' + b, [], {
-                shape: { type: 'function', subType: 'linear', a: a, b: b, color: funcColor, name: '一次y=' + a + 'x+' + b },
-                points: [],
-                type: 'function'
-            });
-            console.log(`已保存一次函数 ${funcName}: y=${a}x${b >= 0 ? '+' + b : b}`);
-        } else if (funcType === '二次' || remaining.includes('²')) {
-            // 二次函数
-            let paramIndex = 0;
-            for (let i = 1; i < parts.length; i++) {
-                if (parts[i] === '二次') continue;
-                if (colorMap[parts[i]]) {
-                    funcColor = colorMap[parts[i]];
-                } else if (!isNaN(parseFloat(parts[i]))) {
-                    if (paramIndex === 0) a = parseFloat(parts[i]);
-                    else if (paramIndex === 1) b = parseFloat(parts[i]);
-                    else if (paramIndex === 2) c = parseFloat(parts[i]);
-                    paramIndex++;
-                }
-            }
-            drawQuadratic(a, b, c, funcColor);
-            // 保存函数信息
-            const funcName = 'F' + (Object.keys(functions).length + 1);
-            functions[funcName] = { type: 'quadratic', a, b, c, color: funcColor };
-            // 记录到shapeList
-            addShapeToList('function', '二次y=' + a + 'x²+' + b + 'x+' + c, [], {
-                shape: { type: 'function', subType: 'quadratic', a: a, b: b, c: c, color: funcColor, name: '二次y=' + a + 'x²+' + b + 'x+' + c },
-                points: [],
-                type: 'function'
-            });
-            console.log(`已保存二次函数 ${funcName}: y=${a}x²${b >= 0 ? '+' + b : b}x${c >= 0 ? '+' + c : c}`);
-        }
     }
     else if (type === '旋转') {
         // 格式：旋转 三角形abc 绕o 45
@@ -2196,9 +2139,9 @@ function showHelp() {
 
 【函数曲线】
   坐标系              绘制数学坐标系
-  正比例 1            绘制y=x函数曲线
-  反比例 1            绘制y=1/x函数曲线
-  二次函数 1 0 0      绘制y=x²函数曲线
+  一次函数 k b        绘制y=kx+b函数曲线
+  反比例 k b          绘制y=k/x+b函数曲线
+  二次函数 a b c      绘制y=ax²+bx+c函数曲线
 
 【样式控制】
   颜色为红            设置全局颜色为红色
@@ -2493,9 +2436,13 @@ function redrawShape(shape) {
         if (pts.length >= 3) drawAngle(pts[0], pts[1], pts[2], shapeData.color);
     } else if (shapeData.type === 'function') {
         if (shapeData.subType === 'linear') {
-            drawLinear(shapeData.k !== undefined ? shapeData.k : shapeData.a, shapeData.color);
+            const k = shapeData.k !== undefined ? shapeData.k : shapeData.a;
+            const b = shapeData.b !== undefined ? shapeData.b : 0;
+            drawLinear(k, b, shapeData.color);
         } else if (shapeData.subType === 'inverse') {
-            drawInverse(shapeData.k, shapeData.color);
+            const k = shapeData.k;
+            const b = shapeData.b !== undefined ? shapeData.b : 0;
+            drawInverse(k, b, shapeData.color);
         } else if (shapeData.subType === 'quadratic') {
             drawQuadratic(shapeData.a, shapeData.b, shapeData.c, shapeData.color);
         }

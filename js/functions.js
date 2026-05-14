@@ -1,14 +1,15 @@
 /**
  * 函数绘制模块
- * 负责绘制数学函数：正比例、反比例、二次函数
+ * 负责绘制数学函数：一次函数、反比例、二次函数
  */
 
 /**
- * 绘制正比例函数 y = kx
+ * 绘制一次函数 y = kx + b
  * @param {number} k - 斜率
+ * @param {number} b - 截距
  * @param {string} color - 颜色
  */
-function drawLinear(k, color) {
+function drawLinear(k, b, color) {
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -17,7 +18,7 @@ function drawLinear(k, color) {
     let started = false;
     for (let canvasX = 0; canvasX <= canvas.width; canvasX += 2) {
         const mathX = (canvasX - mathCenterX) / mathScale;
-        const mathY = k * mathX;
+        const mathY = k * mathX + b;
         const canvasY = mathCenterY - mathY * mathScale;
         
         if (canvasY >= 0 && canvasY <= canvas.height) {
@@ -36,17 +37,25 @@ function drawLinear(k, color) {
     ctx.save();
     ctx.fillStyle = color;
     ctx.font = '14px sans-serif';
-    const labelPos = mathToCanvas(5, k * 5 + 1);
-    ctx.fillText(`y = ${k}x`, labelPos.x, labelPos.y);
+    const labelPos = mathToCanvas(5, k * 5 + b + 1);
+    // 构建 y = kx + b 格式
+    let formula = 'y = ';
+    if (k === 1) formula += 'x';
+    else if (k === -1) formula += '-x';
+    else formula += k + 'x';
+    if (b > 0) formula += ' + ' + b;
+    else if (b < 0) formula += ' - ' + Math.abs(b);
+    ctx.fillText(formula, labelPos.x, labelPos.y);
     ctx.restore();
 }
 
 /**
- * 绘制反比例函数 y = k/x
+ * 绘制反比例函数 y = k/x + b
  * @param {number} k - 比例系数
+ * @param {number} b - 常数
  * @param {string} color - 颜色
  */
-function drawInverse(k, color) {
+function drawInverse(k, b, color) {
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -57,7 +66,7 @@ function drawInverse(k, color) {
     for (let canvasX = mathCenterX + 5; canvasX <= canvas.width; canvasX += 2) {
         const mathX = (canvasX - mathCenterX) / mathScale;
         if (Math.abs(mathX) < 0.1) continue;
-        const mathY = k / mathX;
+        const mathY = k / mathX + b;
         const canvasY = mathCenterY - mathY * mathScale;
         
         if (canvasY >= 0 && canvasY <= canvas.height) {
@@ -77,7 +86,7 @@ function drawInverse(k, color) {
     for (let canvasX = mathCenterX - 5; canvasX >= 0; canvasX -= 2) {
         const mathX = (canvasX - mathCenterX) / mathScale;
         if (Math.abs(mathX) < 0.1) continue;
-        const mathY = k / mathX;
+        const mathY = k / mathX + b;
         const canvasY = mathCenterY - mathY * mathScale;
         
         if (canvasY >= 0 && canvasY <= canvas.height) {
@@ -96,8 +105,12 @@ function drawInverse(k, color) {
     ctx.save();
     ctx.fillStyle = color;
     ctx.font = '14px sans-serif';
-    const labelPos = mathToCanvas(5, k / 5 + 1);
-    ctx.fillText(`y = ${k}/x`, labelPos.x, labelPos.y);
+    const labelPos = mathToCanvas(5, k / 5 + b + 1);
+    // 构建 y = k/x + b 格式
+    let formula = 'y = ' + k + '/x';
+    if (b > 0) formula += ' + ' + b;
+    else if (b < 0) formula += ' - ' + Math.abs(b);
+    ctx.fillText(formula, labelPos.x, labelPos.y);
     ctx.restore();
 }
 
