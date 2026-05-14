@@ -59,12 +59,14 @@ function init() {
     });
     
     // 帮助命令点击事件 - 点击命令示例直接填入输入框
-    document.querySelectorAll('#help .cmd[data-example]').forEach(el => {
-        el.style.cursor = 'pointer';
-        el.addEventListener('click', (e) => {
+    document.querySelectorAll('#help li').forEach(li => {
+        const span = li.querySelector('.cmd[data-example]');
+        if (!span) return;
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            const example = el.getAttribute('data-example');
-            commandInput.value = example;
+            commandInput.value = span.getAttribute('data-example');
             commandInput.focus();
         });
     });
