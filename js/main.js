@@ -63,12 +63,15 @@ function init() {
         const span = li.querySelector('.cmd[data-example]');
         if (!span) return;
         li.style.cursor = 'pointer';
-        li.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        let touched = false;
+        const fillCommand = (e) => {
+            if (touched) { touched = false; return; }
+            if (e) { e.preventDefault(); e.stopPropagation(); }
             commandInput.value = span.getAttribute('data-example');
             commandInput.focus();
-        });
+        };
+        li.addEventListener('touchend', (e) => { touched = true; fillCommand(e); });
+        li.addEventListener('click', fillCommand);
     });
     
     // 初始画网格
