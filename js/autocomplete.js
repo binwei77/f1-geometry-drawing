@@ -294,22 +294,13 @@ function parseInputContext(value) {
         for (let i = 0; i < effectiveSteps.length; i++) {
             const step = effectiveSteps[i];
             
-            // 如果是input步骤（如角度），直接返回
-            if (step.type === 'input') {
-                return {
-                    command: cmdName,
-                    stepIndex: i,
-                    context: context,
-                    partialInput: remaining.trim(),
-                    stepDef: step,
-                    annoType: annoType
-                };
-            }
-            
             // 去掉前缀
             if (step.prefix && remaining.startsWith(step.prefix)) {
                 remaining = remaining.substring(step.prefix.length);
             }
+            
+            // 去掉前导空白（对于input步骤特别重要，因为值之间用空格分隔）
+            remaining = remaining.replace(/^\s+/, '');
             
             // 检查是否有后缀（说明这个步骤已完成）
             if (step.suffix && remaining.includes(step.suffix)) {
@@ -326,7 +317,7 @@ function parseInputContext(value) {
                 continue;
             }
             
-            // 没有后缀，说明当前就在这个步骤
+            // 没有找到后缀，说明当前就在这个步骤
             // 如果是最后一个步骤（无后缀），且remaining不为空
             if (i === effectiveSteps.length - 1 && !step.suffix) {
                 return {
@@ -485,7 +476,15 @@ function updateAutocomplete(value) {
                     insertSuggestion(cmd + ' ', item, steps[0].suffix || '');
                 });
             } else {
-                hideAutocompletePopup();
+                // 第一步是input类型，显示输入提示弹窗
+                showInputHint(steps[0].label, steps[0].placeholder, {
+                    command: cmd,
+                    stepIndex: 0,
+                    context: {},
+                    partialInput: '',
+                    stepDef: steps[0],
+                    annoType: null
+                });
             }
             return;
         }
@@ -628,9 +627,9 @@ function showGuidedSuggestions(ctx) {
         inputElement.placeholder = ctx.command + ' ▸ ' + stepLabel;
     }
     
-    // input步骤不需要弹出补全
+    // input步骤：显示输入提示弹窗（因为placeholder在输入框有值时不可见）
     if (step.type === 'input') {
-        hideAutocompletePopup();
+        showInputHint(stepLabel, step.placeholder, ctx);
         return;
     }
     
@@ -673,6 +672,80 @@ function showGuidedSuggestions(ctx) {
         popupClickActive = true;
         updateAutocomplete(newText);
     });
+}
+
+// ====== 输入提示弹窗（用于type:'input'步骤） ======
+
+function showInputHint(stepLabel, placeholder, ctx) {
+    if (!autocompletePopup) return;
+    autocompletePopup.innerHTML = '';
+    
+    // 进度指示：显示当前步骤和已完成的步骤
+    let stepsArray = guidedCommands[ctx.command];
+    if (ctx.command === '标注' && ctx.annoType && annotationSubSteps[ctx.annoType]) {
+        stepsArray = [...stepsArray, ...annotationSubSteps[ctx.annoType]];
+    }
+    
+    // 进度条
+    const progressDiv = document.createElement('div');
+    progressDiv.style.cssText = 'padding:6px 16px; background:#e3f2fd; font-size:11px; color:#1565c0; border-bottom:1px solid #bbdefb; display:flex; gap:4px; align-items:center; flex-wrap:wrap;';
+    
+    const cmdSpan = document.createElement('span');
+    cmdSpan.style.cssText = 'font-weight:bold;';
+    cmdSpan.textContent = ctx.command;
+    progressDiv.appendChild(cmdSpan);
+    
+    for (let i = 0; i < stepsArray.length; i++) {
+        const sep = document.createElement('span');
+        sep.textContent = '›';
+        sep.style.cssText = 'color:#90caf9;';
+        progressDiv.appendChild(sep);
+        
+        const stepSpan = document.createElement('span');
+        if (i < ctx.stepIndex) {
+            // 已完成的步骤
+            stepSpan.style.cssText = 'color:#4caf50; text-decoration:line-through;';
+            const val = ctx.context[stepsArray[i].key];
+            stepSpan.textContent = val || stepsArray[i].label;
+        } else if (i === ctx.stepIndex) {
+            // 当前步骤
+            stepSpan.style.cssText = 'font-weight:bold; color:#1565c0; background:#bbdefb; padding:1px 6px; border-radius:3px;';
+            stepSpan.textContent = stepsArray[i].label;
+        } else {
+            // 未来的步骤
+            stepSpan.style.cssText = 'color:#999;';
+            stepSpan.textContent = stepsArray[i].label;
+        }
+        progressDiv.appendChild(stepSpan);
+    }
+    autocompletePopup.appendChild(progressDiv);
+    
+    // 提示内容
+    const hintDiv = document.createElement('div');
+    hintDiv.style.cssText = 'padding:14px 16px; display:flex; align-items:center; gap:10px;';
+    
+    const iconSpan = document.createElement('span');
+    iconSpan.style.cssText = 'font-size:20px;';
+    iconSpan.textContent = '✏️';
+    hintDiv.appendChild(iconSpan);
+    
+    const textDiv = document.createElement('div');
+    const labelSpan = document.createElement('div');
+    labelSpan.style.cssText = 'font-weight:bold; font-size:14px; color:#333; margin-bottom:2px;';
+    labelSpan.textContent = stepLabel;
+    textDiv.appendChild(labelSpan);
+    
+    if (placeholder) {
+        const phSpan = document.createElement('div');
+        phSpan.style.cssText = 'font-size:12px; color:#888;';
+        phSpan.textContent = placeholder;
+        textDiv.appendChild(phSpan);
+    }
+    hintDiv.appendChild(textDiv);
+    autocompletePopup.appendChild(hintDiv);
+    
+    positionPopup();
+    autocompletePopup.style.display = 'block';
 }
 
 // ====== 通用建议列表渲染 ======
