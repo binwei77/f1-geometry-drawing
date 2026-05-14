@@ -58,6 +58,17 @@ function init() {
         executeCommand('重做');
     });
     
+    // 帮助命令点击事件 - 点击命令示例直接填入输入框
+    document.querySelectorAll('#help .cmd[data-example]').forEach(el => {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const example = el.getAttribute('data-example');
+            commandInput.value = example;
+            commandInput.focus();
+        });
+    });
+    
     // 初始画网格
     drawGrid();
     // 初始应用缩放

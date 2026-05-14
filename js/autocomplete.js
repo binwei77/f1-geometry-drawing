@@ -390,37 +390,7 @@ function initAutocomplete() {
         }
     });
     
-    // 操作按钮栏事件
-    initActionBar();
-}
 
-/**
- * 初始化操作按钮栏
- * 点击按钮 → 清空输入框 → 填入命令名+空格 → 触发补全
- */
-function initActionBar() {
-    document.querySelectorAll('.actionBtn[data-cmd]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const cmd = btn.getAttribute('data-cmd');
-            if (!inputElement) return;
-            
-            if (cmd === '删除') {
-                // 删除按钮直接显示删除列表
-                inputElement.value = '';
-                inputElement.focus();
-                showDeleteList();
-                return;
-            }
-            
-            // 清空输入框，填入命令名+空格
-            inputElement.value = cmd + ' ';
-            inputElement.focus();
-            
-            // 触发补全
-            updateAutocomplete(inputElement.value);
-        });
-    });
 }
 
 function createAutocompletePopup() {

@@ -71,53 +71,6 @@ body {
     border-color: #4CAF50;
 }
 
-/* 操作按钮栏 */
-#actionBar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    width: 100%;
-    margin-bottom: 8px;
-}
-
-.actionBtn {
-    padding: 10px 14px;
-    font-size: 15px;
-    font-weight: bold;
-    border: none;
-    background-color: #4CAF50;
-    color: white;
-    cursor: pointer;
-    border-radius: 6px;
-    flex: 1;
-    min-width: 56px;
-    text-align: center;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-}
-
-.actionBtn:active {
-    background-color: #388E3C;
-    transform: scale(0.95);
-}
-
-.actionBtn-danger {
-    background-color: #f44336;
-}
-
-.actionBtn-danger:active {
-    background-color: #c62828;
-}
-
-/* 超小屏幕 */
-@media screen and (max-width: 480px) {
-    .actionBtn {
-        padding: 8px 10px;
-        font-size: 14px;
-        min-width: 48px;
-    }
-}
-
 #zoomControls {
     display: flex;
     align-items: center;
