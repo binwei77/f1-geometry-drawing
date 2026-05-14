@@ -157,6 +157,8 @@ body {
     border-radius: 3px;
     font-family: monospace;
     color: #222;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* 竖屏适配 */
