@@ -58,20 +58,26 @@ function init() {
         executeCommand('重做');
     });
     
-    // 帮助命令点击事件 - 点击命令示例直接填入输入框
-    document.querySelectorAll('#help li').forEach(li => {
+    // 帮助命令点击/触摸事件 - 事件委托方式，解决手机端details内部点击不生效
+    let helpFillLock = false;
+    const helpFill = (e) => {
+        if (helpFillLock) return;
+        const li = e.target.closest('#help li');
+        if (!li) return;
         const span = li.querySelector('.cmd[data-example]');
         if (!span) return;
-        li.style.cursor = 'pointer';
-        let touched = false;
-        const fillCommand = (e) => {
-            if (touched) { touched = false; return; }
-            if (e) { e.preventDefault(); e.stopPropagation(); }
-            commandInput.value = span.getAttribute('data-example');
-            commandInput.focus();
-        };
-        li.addEventListener('touchend', (e) => { touched = true; fillCommand(e); });
-        li.addEventListener('click', fillCommand);
+        e.preventDefault();
+        e.stopPropagation();
+        helpFillLock = true;
+        setTimeout(() => { helpFillLock = false; }, 300);
+        commandInput.value = span.getAttribute('data-example');
+        commandInput.focus();
+    };
+    document.addEventListener('touchend', helpFill, { passive: false });
+    document.addEventListener('click', helpFill);
+    // 标记可点击的li
+    document.querySelectorAll('#help li').forEach(li => {
+        if (li.querySelector('.cmd[data-example]')) li.style.cursor = 'pointer';
     });
     
     // 初始画网格
