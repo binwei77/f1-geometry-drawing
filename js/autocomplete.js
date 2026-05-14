@@ -154,6 +154,7 @@ const guidedCommands = {
 let autocompletePopup = null;
 let inputElement = null;
 let popupClickActive = false; // 防止弹窗内部点击后冒泡导致误关闭
+let isComposing = false; // IME输入法组合状态（中文输入法等）
 
 // ====== 数据获取 ======
 
@@ -373,6 +374,16 @@ function initAutocomplete() {
     
     inputElement.addEventListener('input', handleInput);
     
+    // IME输入法组合事件处理（中文输入法在手机上必须）
+    inputElement.addEventListener('compositionstart', () => {
+        isComposing = true;
+    });
+    inputElement.addEventListener('compositionend', (e) => {
+        isComposing = false;
+        // 输入法组合结束后，用最终值重新触发补全
+        updateAutocomplete(e.target.value);
+    });
+    
     inputElement.addEventListener('focus', () => {
         // 输入框有内容时重新触发补全
         if (inputElement.value.trim().length > 0) {
@@ -417,6 +428,8 @@ function createAutocompletePopup() {
 // ====== 输入处理 ======
 
 function handleInput(e) {
+    // IME输入法组合期间不处理，避免中间状态导致弹窗错误关闭
+    if (isComposing) return;
     const value = e.target.value;
     updateAutocomplete(value);
 }
