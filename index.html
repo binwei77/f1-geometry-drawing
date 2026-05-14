@@ -14,7 +14,15 @@
             </div>
         </div>
         <div id="rightPanel">
-            <input type="text" id="commandInput" placeholder="输入命令 (输入/查看所有命令)">
+            <input type="text" id="commandInput" placeholder="输入命令，如：矩形abcd">
+            <div id="actionBar">
+                <button class="actionBtn" data-cmd="平移">平移</button>
+                <button class="actionBtn" data-cmd="旋转">旋转</button>
+                <button class="actionBtn" data-cmd="对称">对称</button>
+                <button class="actionBtn" data-cmd="对折">对折</button>
+                <button class="actionBtn" data-cmd="标注">标注</button>
+                <button class="actionBtn actionBtn-danger" data-cmd="删除">删除</button>
+            </div>
             <div id="zoomControls">
                 <button class="zoomBtn" id="zoomOut">−</button>
                 <span id="zoomLevel">100%</span>
@@ -81,6 +89,7 @@
     <script src="js/canvas.js"></script>
     <script src="js/shapes.js"></script>
     <script src="js/functions.js"></script>
+    <script src="js/annotations.js"></script>
     <script src="js/commands.js"></script>
     <script src="js/autocomplete.js"></script>
     <script src="js/main.js"></script>

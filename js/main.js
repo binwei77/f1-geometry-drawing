@@ -23,22 +23,13 @@ function init() {
         if (e.key === 'Enter') {
             let cmdText = commandInput.value.trim();
             
-            // 如果用户选择了命令，将命令名称和输入的参数组合
-            const selectedCmd = getSelectedCommand();
-            if (selectedCmd && selectedCmd.name && cmdText) {
-                // 检查输入是否已经包含命令名称
-                if (!cmdText.startsWith(selectedCmd.name)) {
-                    cmdText = selectedCmd.name + ' ' + cmdText;
-                }
-            }
-            
             if (cmdText) {
                 executeCommand(cmdText);
             }
             
             commandInput.value = '';
-            // 重置输入框提示
-            resetInput();
+            commandInput.placeholder = '输入命令，如：矩形abcd';
+            hideAutocompletePopup();
         }
     });
     

@@ -1,6 +1,6 @@
 /**
- * 命令自动补全模块
- * 提供命令列表、参数提示和自动补全功能
+ * 命令自动补全模块 - 代码编辑器风格
+ * 输入命令时自动弹出上下文相关的补全建议，点击后追加到输入框
  */
 
 // 命令列表数据
@@ -31,7 +31,13 @@ const commandsList = [
             { name: '旋转', example: '旋转矩形abcd 绕a 90', hint: '图形名 绕点 角度' },
             { name: '对称', example: '对称矩形abcd 关于直线ac', hint: '图形名 关于线段' },
             { name: '对折', example: '对折三角形abc 关于直线ab', hint: '图形名 关于线段' },
-            { name: '平移', example: '平移三角形abc 使a到m', hint: '图形名和其他' }
+            { name: '平移', example: '平移三角形abc 使a到m', hint: '图形名 使起点到终点' }
+        ]
+    },
+    {
+        category: '标注功能',
+        commands: [
+            { name: '标注', example: '标注 等长 ab cd', hint: '类型 参数...' }
         ]
     },
     {
@@ -62,358 +68,703 @@ const commandsList = [
     }
 ];
 
+// 所有命令名（用于匹配）
+const allCommandNames = [];
+commandsList.forEach(cat => cat.commands.forEach(cmd => {
+    allCommandNames.push(cmd.name);
+}));
+
+// 标注类型的子步骤定义（动态，根据选择的类型决定后续步骤）
+const annotationSubSteps = {
+    '等长': [
+        { key: 'seg1', label: '第1条线段', getSuggestions: () => getAvailableSegments(), suffix: ' ' },
+        { key: 'seg2', label: '第2条线段', getSuggestions: () => getAvailableSegments() }
+    ],
+    '角度': [
+        { key: 'vertex', label: '角顶点', getSuggestions: () => getAvailablePoints(false), suffix: ' ' },
+        { key: 'arm1', label: '第一条边上的点', getSuggestions: () => getAvailablePoints(false), suffix: ' ' },
+        { key: 'arm2', label: '第二条边上的点', getSuggestions: () => getAvailablePoints(false) }
+    ],
+    '垂直': [
+        { key: 'seg1', label: '第1条线段', getSuggestions: () => getAvailableSegments(), suffix: ' ' },
+        { key: 'seg2', label: '第2条线段', getSuggestions: () => getAvailableSegments() }
+    ],
+    '平行': [
+        { key: 'seg1', label: '第1条线段', getSuggestions: () => getAvailableSegments(), suffix: ' ' },
+        { key: 'seg2', label: '第2条线段', getSuggestions: () => getAvailableSegments() }
+    ],
+    '长度': [
+        { key: 'seg1', label: '线段', getSuggestions: () => getAvailableSegments() }
+    ],
+    '全等': [
+        { key: 'shapeType', label: '图形类型', getSuggestions: () => [
+            { name: '三角形', displayName: '三角形 △', insertText: '三角形' },
+            { name: '矩形', displayName: '矩形 □', insertText: '矩形' }
+        ], suffix: ' ' },
+        { key: 'group1', label: '图形1-点名称', type: 'input', suffix: ' ' },
+        { key: 'group2', label: '图形2-点名称', type: 'input' }
+    ]
+};
+
+// 需要引导补全的命令定义
+const guidedCommands = {
+    '平移': [
+        { key: 'shape', label: '图形', getSuggestions: () => getAvailableShapes(), suffix: ' 使' },
+        { key: 'fromPoint', label: '起点', getSuggestions: (ctx) => getShapePointsList(ctx.shape), prefix: '', suffix: '到' },
+        { key: 'toPoint', label: '终点', getSuggestions: () => getAvailablePoints(false), prefix: '' }
+    ],
+    '旋转': [
+        { key: 'shape', label: '图形', getSuggestions: () => getAvailableShapes(), suffix: ' 绕' },
+        { key: 'center', label: '旋转中心', getSuggestions: () => getAvailablePoints(false), prefix: '', suffix: ' ' },
+        { key: 'angle', label: '角度', type: 'input', prefix: '', suffix: '', placeholder: '如90或-45' }
+    ],
+    '对称': [
+        { key: 'shape', label: '图形', getSuggestions: () => getAvailableShapes(), suffix: ' 关于直线' },
+        { key: 'axis', label: '对称轴', getSuggestions: () => getAvailableSegments(), prefix: '' }
+    ],
+    '对折': [
+        { key: 'shape', label: '图形', getSuggestions: () => getAvailableShapes(), suffix: ' 关于直线' },
+        { key: 'axis', label: '对折线', getSuggestions: () => getAvailableSegments(), prefix: '' }
+    ],
+    '标注': [
+        { key: 'type', label: '标注类型', getSuggestions: () => [
+            { name: '等长', displayName: '等长 ═', insertText: '等长' },
+            { name: '角度', displayName: '角度 ∠', insertText: '角度' },
+            { name: '垂直', displayName: '垂直 ⊥', insertText: '垂直' },
+            { name: '平行', displayName: '平行 ∥', insertText: '平行' },
+            { name: '长度', displayName: '长度', insertText: '长度' },
+            { name: '全等', displayName: '全等 ≅', insertText: '全等' }
+        ], suffix: ' ' }
+    ]
+};
+
+// 状态
 let autocompletePopup = null;
 let inputElement = null;
+let popupClickActive = false; // 防止弹窗内部点击后冒泡导致误关闭
 
-/**
- * 初始化自动补全功能
- */
-function initAutocomplete() {
-    inputElement = document.getElementById('commandInput');
-    if (!inputElement) return;
+// ====== 数据获取 ======
+
+function getAvailableShapes() {
+    const sList = window.shapeList || [];
+    const typeMap = { 'rectangle': '矩形', 'triangle': '三角形' };
     
-    // 创建弹窗元素
-    createAutocompletePopup();
+    return sList.filter(entry => {
+        const shape = entry.data && entry.data.shape;
+        if (!shape) return false;
+        return shape.type === 'triangle' || shape.type === 'rectangle';
+    }).map(entry => {
+        const shape = entry.data.shape;
+        const displayType = typeMap[shape.type] || shape.type;
+        return {
+            name: shape.name,
+            displayName: displayType + ' ' + shape.name,
+            insertText: displayType + shape.name,
+            pointNames: shape.pointNames || []
+        };
+    });
+}
+
+function getAvailablePoints(excludePrimed) {
+    const pts = window.points || {};
+    return Object.keys(pts)
+        .filter(name => excludePrimed ? !name.includes("'") : true)
+        .sort()
+        .map(name => ({
+            name: name,
+            displayName: '点 ' + name.toUpperCase(),
+            insertText: name
+        }));
+}
+
+function getShapePointsList(shapeName) {
+    const pts = window.points || {};
+    const result = [];
+    for (let i = 0; i < shapeName.length; i++) {
+        const pName = shapeName[i];
+        if (pts[pName]) {
+            result.push({
+                name: pName,
+                displayName: '点 ' + pName.toUpperCase(),
+                insertText: pName
+            });
+        }
+    }
+    return result;
+}
+
+function getAvailableSegments() {
+    const sList = window.shapeList || [];
+    const segments = new Set();
     
-    // 监听输入事件
-    inputElement.addEventListener('input', handleInput);
-    
-    // 监听焦点事件
-    inputElement.addEventListener('focus', () => {
-        if (inputElement.value === '/') {
-            showAutocompletePopup();
+    sList.forEach(entry => {
+        const shape = entry.data && entry.data.shape;
+        if (!shape || !shape.pointNames) return;
+        const pns = shape.pointNames;
+        
+        if (shape.type === 'triangle') {
+            segments.add(pns[0] + pns[1]);
+            segments.add(pns[1] + pns[2]);
+            segments.add(pns[2] + pns[0]);
+        } else if (shape.type === 'rectangle') {
+            segments.add(pns[0] + pns[1]);
+            segments.add(pns[1] + pns[2]);
+            segments.add(pns[2] + pns[3]);
+            segments.add(pns[3] + pns[0]);
+        } else if (shape.type === 'segment' || shape.type === 'line') {
+            segments.add(shape.name);
         }
     });
     
-    // 点击其他地方关闭弹窗
-    document.addEventListener('click', (e) => {
-        if (autocompletePopup && !autocompletePopup.contains(e.target) && e.target !== inputElement) {
-            hideAutocompletePopup();
-        }
-    });
+    return Array.from(segments).sort().map(seg => ({
+        name: seg,
+        displayName: '线段 ' + seg.toUpperCase(),
+        insertText: seg
+    }));
 }
 
-/**
- * 创建自动补全弹窗
- */
-function createAutocompletePopup() {
-    autocompletePopup = document.createElement('div');
-    autocompletePopup.id = 'autocompletePopup';
-    autocompletePopup.style.display = 'none';
-    autocompletePopup.style.position = 'absolute';
-    autocompletePopup.style.backgroundColor = 'white';
-    autocompletePopup.style.border = '1px solid #ddd';
-    autocompletePopup.style.borderRadius = '4px';
-    autocompletePopup.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-    autocompletePopup.style.maxHeight = '60vh';
-    autocompletePopup.style.overflowY = 'auto';
-    autocompletePopup.style.zIndex = '1000';
-    autocompletePopup.style.width = '100%';
-    autocompletePopup.style.maxWidth = '400px';
-    
-    document.body.appendChild(autocompletePopup);
-}
-
-/**
- * 处理输入事件
- */
-function handleInput(e) {
-    const value = e.target.value.trim();
-    
-    if (value === '/') {
-        showAutocompletePopup();
-    } else if (value === '/d' || value === '/D') {
-        // 快捷方式：/d 直接显示删除列表
-        showDeletePopup();
-    } else {
-        hideAutocompletePopup();
-    }
-}
-
-/**
- * 显示自动补全弹窗
-内容 */
-function showAutocompletePopup() {
-    if (!autocompletePopup || !inputElement) return;
-    
-    // 清空弹窗内容
-    autocompletePopup.innerHTML = '';
-    
-    // 添加标题
-    const title = document.createElement('div');
-    title.style.padding = '10px';
-    title.style.backgroundColor = '#f5f5f5';
-    title.style.fontWeight = 'bold';
-    title.style.borderBottom = '1px solid #ddd';
-    title.textContent = '选择命令';
-    autocompletePopup.appendChild(title);
-    
-    // 按分类添加命令
-    commandsList.forEach(category => {
-        const categoryDiv = document.createElement('div');
-        categoryDiv.style.margin = '0';
-        categoryDiv.style.padding = '0';
-        
-        // 分类标题
-        const categoryTitle = document.createElement('div');
-        categoryTitle.style.padding = '8px 10px';
-        categoryTitle.style.backgroundColor = '#e9ecef';
-        categoryTitle.style.fontWeight = 'bold';
-        categoryTitle.style.fontSize = '13px';
-        categoryTitle.style.color = '#495057';
-        categoryTitle.textContent = category.category;
-        categoryDiv.appendChild(categoryTitle);
-        
-        // 命令列表
-        category.commands.forEach(cmd => {
-            const cmdItem = document.createElement('div');
-            cmdItem.style.padding = '8px 10px';
-            cmdItem.style.cursor = 'pointer';
-            cmdItem.style.borderBottom = '1px solid #eee';
-            
-            // 命令名称和示例
-            const cmdText = document.createElement('span');
-            cmdText.style.fontWeight = 'bold';
-            cmdText.style.color = '#333';
-            cmdText.textContent = cmd.example;
-            cmdItem.appendChild(cmdText);
-            
-            // 提示信息
-            const hintText = document.createElement('span');
-            hintText.style.marginLeft = '10px';
-            hintText.style.fontSize = '12px';
-            hintText.style.color = '#666';
-            hintText.textContent = `(${cmd.hint})`;
-            cmdItem.appendChild(hintText);
-            
-            // 悬停效果
-            cmdItem.addEventListener('mouseenter', () => {
-                cmdItem.style.backgroundColor = '#f8f9fa';
-            });
-            cmdItem.addEventListener('mouseleave', () => {
-                cmdItem.style.backgroundColor = 'white';
-            });
-            
-            // 点击事件
-            cmdItem.addEventListener('click', () => {
-                selectCommand(cmd);
-            });
-            
-            categoryDiv.appendChild(cmdItem);
-        });
-        
-        autocompletePopup.appendChild(categoryDiv);
-    });
-    
-    // 定位弹窗
-    const rect = inputElement.getBoundingClientRect();
-    autocompletePopup.style.top = (rect.bottom + window.scrollY) + 'px';
-    autocompletePopup.style.left = rect.left + 'px';
-    
-    // 显示弹窗
-    autocompletePopup.style.display = 'block';
-}
-
-/**
- * 隐藏自动补全弹窗
- */
-function hideAutocompletePopup() {
-    if (autocompletePopup) {
-        autocompletePopup.style.display = 'none';
-    }
-}
-
-/**
- * 获取当前可删除的图形列表
- */
 function getDeletableObjects() {
     const objects = [];
-    
     const pts = window.points || {};
     const sList = window.shapeList || [];
-    
-    // 跟踪哪些点已被图形使用
     const usedPoints = new Set();
     
-    // 从 shapeList（单一数据源）读取所有图形
     const typeMap = {
-        'rectangle': '矩形',
-        'triangle': '三角形',
-        'segment': '线段',
-        'circle': '圆',
-        'angle': '角',
-        'line': '直线',
-        'point': '点',
-        'function': '函数'
+        'rectangle': '矩形', 'triangle': '三角形', 'segment': '线段',
+        'circle': '圆', 'angle': '角', 'line': '直线', 'point': '点', 'function': '函数'
     };
     
     sList.forEach(entry => {
         const shape = entry.data && entry.data.shape;
         if (!shape) return;
         const displayType = typeMap[shape.type] || shape.type;
-        objects.push({
-            type: displayType,
-            name: shape.name,
-            displayName: shape.name
-        });
-        // 标记该图形使用的点
-        if (shape.pointNames) {
-            shape.pointNames.forEach(p => usedPoints.add(p));
-        }
+        objects.push({ type: displayType, name: shape.name, displayName: shape.name, insertText: shape.name });
+        if (shape.pointNames) shape.pointNames.forEach(p => usedPoints.add(p));
     });
     
-    // 只显示不属于任何图形的孤立点
-    const pointNames = Object.keys(pts).filter(name => !name.includes("'")).sort();
-    pointNames.forEach(pointName => {
+    Object.keys(pts).filter(name => !name.includes("'")).sort().forEach(pointName => {
         if (!usedPoints.has(pointName)) {
-            objects.push({
-                type: '点',
-                name: pointName,
-                displayName: pointName
-            });
+            objects.push({ type: '点', name: pointName, displayName: pointName, insertText: pointName });
         }
     });
     
     return objects;
 }
 
+// ====== 命令解析 - 判断当前输入处于引导补全的哪个阶段 ======
+
 /**
- * 显示可删除对象列表弹窗
+ * 解析输入框内容，返回当前补全上下文
+ * 返回: { command, stepIndex, context, suffix, partialInput }
+ *   command: 当前命令名 (如 '平移')
+ *   stepIndex: 当前步骤索引 (0-based)
+ *   context: 已收集的参数 { shape: '...', fromPoint: '...' }
+ *   suffix: 当前步骤前缀之后的固定后缀 (如 '使', '绕', '到')
+ *   partialInput: 用户当前正在输入的部分文字 (用于过滤)
  */
-function showDeletePopup() {
-    if (!autocompletePopup || !inputElement) return;
+function parseInputContext(value) {
+    if (!value) return null;
     
-    // 清空弹窗内容
+    // 尝试匹配每个引导命令
+    for (const [cmdName, steps] of Object.entries(guidedCommands)) {
+        // 检查输入是否以该命令名开头
+        if (!value.startsWith(cmdName)) continue;
+        
+        const afterCmd = value.substring(cmdName.length);
+        let remaining = afterCmd;
+        const context = {};
+        
+        // 对于标注命令，需要动态拼接子步骤
+        let effectiveSteps = steps;
+        let isAnnotation = (cmdName === '标注');
+        let annoType = null;
+        
+        for (let i = 0; i < effectiveSteps.length; i++) {
+            const step = effectiveSteps[i];
+            
+            // 如果是input步骤（如角度），直接返回
+            if (step.type === 'input') {
+                return {
+                    command: cmdName,
+                    stepIndex: i,
+                    context: context,
+                    partialInput: remaining.trim(),
+                    stepDef: step,
+                    annoType: annoType
+                };
+            }
+            
+            // 去掉前缀
+            if (step.prefix && remaining.startsWith(step.prefix)) {
+                remaining = remaining.substring(step.prefix.length);
+            }
+            
+            // 检查是否有后缀（说明这个步骤已完成）
+            if (step.suffix && remaining.includes(step.suffix)) {
+                const idx = remaining.indexOf(step.suffix);
+                const paramValue = remaining.substring(0, idx).trim();
+                context[step.key] = paramValue;
+                remaining = remaining.substring(idx + step.suffix.length);
+                
+                // 标注命令：type步骤完成后，展开子步骤
+                if (isAnnotation && step.key === 'type' && annotationSubSteps[paramValue]) {
+                    annoType = paramValue;
+                    effectiveSteps = [...steps, ...annotationSubSteps[paramValue]];
+                }
+                continue;
+            }
+            
+            // 没有后缀，说明当前就在这个步骤
+            // 如果是最后一个步骤（无后缀），且remaining不为空
+            if (i === effectiveSteps.length - 1 && !step.suffix) {
+                return {
+                    command: cmdName,
+                    stepIndex: i,
+                    context: context,
+                    partialInput: remaining.trim(),
+                    stepDef: step,
+                    annoType: annoType
+                };
+            }
+            
+            // 检查当前remaining是否可能是步骤值的一部分
+            // 如果remaining有内容但没找到后缀，说明正在输入
+            const trimmedRemaining = remaining.trim();
+            if (trimmedRemaining === '' || !step.suffix) {
+                // 刚到这一步，或者没有后缀的最后一步
+                return {
+                    command: cmdName,
+                    stepIndex: i,
+                    context: context,
+                    partialInput: trimmedRemaining,
+                    stepDef: step,
+                    annoType: annoType
+                };
+            }
+            
+            // remaining有内容但没有找到后缀 - 正在输入这一步
+            return {
+                command: cmdName,
+                stepIndex: i,
+                context: context,
+                partialInput: trimmedRemaining,
+                stepDef: step,
+                annoType: annoType
+            };
+        }
+        
+        // 所有步骤都完成了
+        return { command: cmdName, stepIndex: effectiveSteps.length, context: context, partialInput: '', annoType: annoType };
+    }
+    
+    return null;
+}
+
+// ====== 初始化 ======
+
+function initAutocomplete() {
+    inputElement = document.getElementById('commandInput');
+    if (!inputElement) return;
+    
+    createAutocompletePopup();
+    
+    inputElement.addEventListener('input', handleInput);
+    
+    inputElement.addEventListener('focus', () => {
+        // 输入框有内容时重新触发补全
+        if (inputElement.value.trim().length > 0) {
+            updateAutocomplete(inputElement.value);
+        }
+    });
+    
+    // 点击弹窗外部时关闭弹窗
+    document.addEventListener('click', (e) => {
+        if (popupClickActive) {
+            popupClickActive = false;
+            return;
+        }
+        if (autocompletePopup && autocompletePopup.style.display !== 'none') {
+            if (!autocompletePopup.contains(e.target) && e.target !== inputElement) {
+                hideAutocompletePopup();
+            }
+        }
+    });
+    
+    // 操作按钮栏事件
+    initActionBar();
+}
+
+/**
+ * 初始化操作按钮栏
+ * 点击按钮 → 清空输入框 → 填入命令名+空格 → 触发补全
+ */
+function initActionBar() {
+    document.querySelectorAll('.actionBtn[data-cmd]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const cmd = btn.getAttribute('data-cmd');
+            if (!inputElement) return;
+            
+            if (cmd === '删除') {
+                // 删除按钮直接显示删除列表
+                inputElement.value = '';
+                inputElement.focus();
+                showDeleteList();
+                return;
+            }
+            
+            // 清空输入框，填入命令名+空格
+            inputElement.value = cmd + ' ';
+            inputElement.focus();
+            
+            // 触发补全
+            updateAutocomplete(inputElement.value);
+        });
+    });
+}
+
+function createAutocompletePopup() {
+    autocompletePopup = document.createElement('div');
+    autocompletePopup.id = 'autocompletePopup';
+    autocompletePopup.style.display = 'none';
+    autocompletePopup.style.position = 'absolute';
+    autocompletePopup.style.zIndex = '1000';
+    autocompletePopup.style.backgroundColor = 'white';
+    autocompletePopup.style.border = '1px solid #ddd';
+    autocompletePopup.style.borderRadius = '8px';
+    autocompletePopup.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    autocompletePopup.style.maxHeight = '300px';
+    autocompletePopup.style.overflowY = 'auto';
+    autocompletePopup.style.fontSize = '14px';
+    autocompletePopup.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+    
+    document.body.appendChild(autocompletePopup);
+}
+
+// ====== 输入处理 ======
+
+function handleInput(e) {
+    const value = e.target.value;
+    updateAutocomplete(value);
+}
+
+function updateAutocomplete(value) {
+    if (!value || !value.trim()) {
+        hideAutocompletePopup();
+        if (inputElement) inputElement.placeholder = '输入命令，如：矩形abcd';
+        return;
+    }
+    
+    const trimmedValue = value.trim();
+    
+    // 检查是否是 / 触发命令列表
+    if (trimmedValue === '/') {
+        showCommandList();
+        return;
+    }
+    
+    if (trimmedValue === '/d' || trimmedValue === '/D') {
+        showDeleteList();
+        return;
+    }
+    
+    // 检查是否匹配引导命令（保留末尾空格用于步骤判断）
+    const ctx = parseInputContext(value);
+    if (ctx) {
+        // 计算有效步骤数（标注命令可能动态展开）
+        let stepsArray = guidedCommands[ctx.command];
+        if (ctx.command === '标注' && ctx.annoType && annotationSubSteps[ctx.annoType]) {
+            stepsArray = [...stepsArray, ...annotationSubSteps[ctx.annoType]];
+        }
+        if (ctx.stepIndex < stepsArray.length) {
+            showGuidedSuggestions(ctx);
+            return;
+        }
+    }
+    
+    // 检查是否刚输入了命令名（还没空格或正在输入命令名）
+    const matchingCmds = allCommandNames.filter(name => 
+        name === trimmedValue || (trimmedValue.startsWith(name) && trimmedValue.length === name.length)
+    );
+    if (matchingCmds.length > 0) {
+        // 命令名刚输完，准备输入参数
+        const cmd = matchingCmds[0];
+        if (guidedCommands[cmd]) {
+            // 显示第一步的补全
+            const steps = guidedCommands[cmd];
+            if (steps[0].type !== 'input') {
+                const items = steps[0].getSuggestions({});
+                const filtered = items.filter(item => 
+                    !ctx || ctx.partialInput === '' || 
+                    item.insertText.startsWith(ctx.partialInput || '') ||
+                    item.displayName.includes(ctx.partialInput || '')
+                );
+                showSuggestions(filtered, steps[0].label, (item) => {
+                    insertSuggestion(cmd + ' ', item, steps[0].suffix || '');
+                });
+            } else {
+                hideAutocompletePopup();
+            }
+            return;
+        }
+    }
+    
+    // 普通命令 - 不显示补全
+    hideAutocompletePopup();
+}
+
+// ====== 命令列表 ======
+
+function showCommandList() {
+    if (!autocompletePopup) return;
     autocompletePopup.innerHTML = '';
     
-    // 添加标题
+    commandsList.forEach(category => {
+        // 分类标题
+        const categoryTitle = document.createElement('div');
+        categoryTitle.style.cssText = 'padding:8px 16px; background:#e9ecef; font-weight:bold; font-size:13px; color:#495057; position:sticky; top:0; z-index:1;';
+        categoryTitle.textContent = category.category;
+        autocompletePopup.appendChild(categoryTitle);
+        
+        category.commands.forEach(cmd => {
+            const item = document.createElement('div');
+            item.style.cssText = 'padding:10px 16px; cursor:pointer; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center;';
+            
+            const leftDiv = document.createElement('div');
+            leftDiv.style.cssText = 'display:flex; align-items:center; gap:8px;';
+            
+            const cmdText = document.createElement('span');
+            cmdText.style.cssText = 'font-weight:bold; color:#333; font-size:14px;';
+            cmdText.textContent = cmd.example;
+            leftDiv.appendChild(cmdText);
+            
+            const hintText = document.createElement('span');
+            hintText.style.cssText = 'font-size:11px; color:#999;';
+            hintText.textContent = cmd.hint;
+            leftDiv.appendChild(hintText);
+            
+            item.appendChild(leftDiv);
+            
+            // 引导命令标记
+            if (guidedCommands[cmd.name]) {
+                const badge = document.createElement('span');
+                badge.style.cssText = 'background:#4CAF50; color:white; font-size:10px; padding:2px 8px; border-radius:10px; white-space:nowrap;';
+                badge.textContent = '补全';
+                item.appendChild(badge);
+            }
+            
+            item.addEventListener('mouseenter', () => { item.style.backgroundColor = '#e8f5e9'; });
+            item.addEventListener('mouseleave', () => { item.style.backgroundColor = 'white'; });
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                popupClickActive = true;
+                // 将命令名放入输入框
+                inputElement.value = cmd.name + ' ';
+                inputElement.focus();
+                // 触发补全
+                updateAutocomplete(inputElement.value);
+            });
+            
+            autocompletePopup.appendChild(item);
+        });
+    });
+    
+    positionPopup();
+    autocompletePopup.style.display = 'block';
+}
+
+// ====== 删除列表 ======
+
+function showDeleteList() {
+    if (!autocompletePopup || !inputElement) return;
+    autocompletePopup.innerHTML = '';
+    
     const title = document.createElement('div');
-    title.style.padding = '10px';
-    title.style.backgroundColor = '#f5f5f5';
-    title.style.fontWeight = 'bold';
-    title.style.borderBottom = '1px solid #ddd';
-    title.textContent = '选择要删除的对象';
+    title.style.cssText = 'padding:12px 16px; background:#f44336; color:white; font-weight:bold; border-radius:8px 8px 0 0; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:1;';
+    title.innerHTML = '<span>选择要删除的对象</span>';
     autocompletePopup.appendChild(title);
     
-    // 获取可删除对象
     const objects = getDeletableObjects();
-    
     if (objects.length === 0) {
         const emptyMsg = document.createElement('div');
-        emptyMsg.style.padding = '20px';
-        emptyMsg.style.textAlign = 'center';
-        emptyMsg.style.color = '#999';
+        emptyMsg.style.cssText = 'padding:20px; text-align:center; color:#999;';
         emptyMsg.textContent = '没有可删除的对象';
         autocompletePopup.appendChild(emptyMsg);
     } else {
         objects.forEach(obj => {
             const item = document.createElement('div');
-            item.style.padding = '12px 10px';
-            item.style.cursor = 'pointer';
-            item.style.borderBottom = '1px solid #eee';
-            item.style.display = 'flex';
-            item.style.alignItems = 'center';
+            item.style.cssText = 'padding:12px 16px; cursor:pointer; border-bottom:1px solid #f0f0f0; display:flex; align-items:center; gap:10px; font-size:14px;';
             
-            // 类型标签
             const typeTag = document.createElement('span');
-            typeTag.style.backgroundColor = '#e9ecef';
-            typeTag.style.padding = '3px 8px';
-            typeTag.style.borderRadius = '3px';
-            typeTag.style.fontSize = '12px';
-            typeTag.style.marginRight = '10px';
+            typeTag.style.cssText = 'background:#e9ecef; padding:3px 8px; border-radius:3px; font-size:12px;';
             typeTag.textContent = obj.type;
             item.appendChild(typeTag);
             
-            // 对象名称
             const nameSpan = document.createElement('span');
             nameSpan.style.fontWeight = 'bold';
             nameSpan.textContent = obj.displayName;
             item.appendChild(nameSpan);
             
-            // 悬停效果
-            item.addEventListener('mouseenter', () => {
-                item.style.backgroundColor = '#f8f9fa';
-            });
-            item.addEventListener('mouseleave', () => {
-                item.style.backgroundColor = 'white';
-            });
-            
-            // 点击事件
-            item.addEventListener('click', () => {
-                inputElement.value = '删除 ' + obj.name;
-                // 不要立即重置，让用户可以查看并执行命令
+            item.addEventListener('mouseenter', () => { item.style.backgroundColor = '#fff0f0'; });
+            item.addEventListener('mouseleave', () => { item.style.backgroundColor = 'white'; });
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                popupClickActive = true;
+                inputElement.value = '删除 ' + obj.insertText;
                 hideAutocompletePopup();
                 inputElement.focus();
-                console.log(`准备删除: ${obj.name}`);
             });
             
             autocompletePopup.appendChild(item);
         });
     }
     
-    // 定位弹窗
-    const rect = inputElement.getBoundingClientRect();
-    autocompletePopup.style.top = (rect.bottom + window.scrollY) + 'px';
-    autocompletePopup.style.left = rect.left + 'px';
-    
-    // 显示弹窗
+    positionPopup();
     autocompletePopup.style.display = 'block';
 }
 
-/**
- * 选中命令
- */
-function selectCommand(cmd) {
-    if (!inputElement) return;
+// ====== 引导补全 ======
+
+function showGuidedSuggestions(ctx) {
+    let steps = guidedCommands[ctx.command];
+    // 标注命令：动态展开子步骤
+    if (ctx.command === '标注' && ctx.annoType && annotationSubSteps[ctx.annoType]) {
+        steps = [...steps, ...annotationSubSteps[ctx.annoType]];
+    }
+    const step = steps[ctx.stepIndex];
     
-    // 特殊处理"删除"命令
-    if (cmd.name === '删除') {
-        // 显示可删除对象列表
-        showDeletePopup();
+    if (!step) {
+        hideAutocompletePopup();
         return;
     }
     
-    // 将命令名称+空格放到输入框中
-    inputElement.value = cmd.name + ' ';
+    // 更新placeholder显示当前步骤提示
+    const stepLabel = step.label || '';
+    if (step.type === 'input' && step.placeholder) {
+        inputElement.placeholder = ctx.command + ' ▸ ' + stepLabel + '（' + step.placeholder + '）';
+    } else {
+        inputElement.placeholder = ctx.command + ' ▸ ' + stepLabel;
+    }
     
-    // 更新placeholder为参数提示
-    inputElement.placeholder = cmd.hint;
+    // input步骤不需要弹出补全
+    if (step.type === 'input') {
+        hideAutocompletePopup();
+        return;
+    }
     
-    // 存储当前命令信息
-    inputElement.dataset.selectedCommand = cmd.name;
-    inputElement.dataset.commandHint = cmd.hint;
+    // 获取当前步骤的建议列表
+    let items = step.getSuggestions(ctx.context);
     
-    // 关闭弹窗
-    hideAutocompletePopup();
+    // 过滤
+    if (ctx.partialInput) {
+        items = items.filter(item => 
+            item.insertText.toLowerCase().startsWith(ctx.partialInput.toLowerCase()) ||
+            item.displayName.toLowerCase().includes(ctx.partialInput.toLowerCase())
+        );
+    }
     
-    // 聚焦输入框
+    showSuggestions(items, step.label, (item) => {
+        // 计算要替换的文本
+        // 当前输入框内容 = "平移 三角形efg 使a" 
+        // 需要替换最后的partialInput为item.insertText + suffix
+        const currentValue = inputElement.value;
+        const partial = ctx.partialInput;
+        let baseValue;
+        if (partial && currentValue.endsWith(partial)) {
+            baseValue = currentValue.substring(0, currentValue.length - partial.length);
+        } else {
+            baseValue = currentValue;
+        }
+        
+        const newText = baseValue + item.insertText + (step.suffix || '');
+        inputElement.value = newText;
+        inputElement.focus();
+        
+        // 判断是否所有步骤已完成：当前是最后一步且无suffix
+        const isLastStep = ctx.stepIndex === steps.length - 1;
+        if (isLastStep && !step.suffix) {
+            hideAutocompletePopup();
+            return;
+        }
+        
+        // 触发下一轮补全（保留末尾空格）
+        popupClickActive = true;
+        updateAutocomplete(newText);
+    });
+}
+
+// ====== 通用建议列表渲染 ======
+
+function showSuggestions(items, label, onSelect) {
+    if (!autocompletePopup) return;
+    autocompletePopup.innerHTML = '';
+    
+    if (items.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.cssText = 'padding:16px; text-align:center; color:#999; font-size:13px;';
+        emptyMsg.textContent = '没有可选项';
+        autocompletePopup.appendChild(emptyMsg);
+        positionPopup();
+        autocompletePopup.style.display = 'block';
+        return;
+    }
+    
+    // 小标签
+    if (label) {
+        const labelDiv = document.createElement('div');
+        labelDiv.style.cssText = 'padding:6px 16px; background:#e8f5e9; font-size:12px; color:#2e7d32; font-weight:bold; position:sticky; top:0; z-index:1;';
+        labelDiv.textContent = label;
+        autocompletePopup.appendChild(labelDiv);
+    }
+    
+    items.forEach(item => {
+        const el = document.createElement('div');
+        el.style.cssText = 'padding:10px 16px; cursor:pointer; border-bottom:1px solid #f0f0f0; font-size:14px; color:#333;';
+        el.textContent = item.displayName;
+        
+        el.addEventListener('mouseenter', () => { el.style.backgroundColor = '#e8f5e9'; });
+        el.addEventListener('mouseleave', () => { el.style.backgroundColor = 'white'; });
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            popupClickActive = true;
+            onSelect(item);
+        });
+        
+        autocompletePopup.appendChild(el);
+    });
+    
+    positionPopup();
+    autocompletePopup.style.display = 'block';
+}
+
+// ====== 工具函数 ======
+
+function insertSuggestion(prefix, item, suffix) {
+    inputElement.value = prefix + item.insertText + suffix;
     inputElement.focus();
-    
-    console.log(`已选择命令: ${cmd.name}`);
-    console.log(`示例: ${cmd.example}`);
-    console.log(`参数提示: ${cmd.hint}`);
+    popupClickActive = true;
+    updateAutocomplete(inputElement.value);
 }
 
-/**
- * 获取当前选中的命令信息
- */
-function getSelectedCommand() {
-    if (!inputElement) return null;
-    
-    return {
-        name: inputElement.dataset.selectedCommand,
-        hint: inputElement.dataset.commandHint
-    };
+function positionPopup() {
+    if (!autocompletePopup || !inputElement) return;
+    const rect = inputElement.getBoundingClientRect();
+    const popupWidth = Math.min(400, window.innerWidth - 20);
+    const left = Math.max(10, rect.left + (rect.width - popupWidth) / 2);
+    autocompletePopup.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    autocompletePopup.style.left = left + 'px';
+    autocompletePopup.style.width = popupWidth + 'px';
 }
 
-/**
- * 重置输入框
- */
+function hideAutocompletePopup() {
+    if (autocompletePopup) {
+        autocompletePopup.style.display = 'none';
+    }
+}
+
 function resetInput() {
     if (!inputElement) return;
-    
     inputElement.value = '';
     inputElement.placeholder = '输入命令，例如：矩形abcd 或 圆O';
-    delete inputElement.dataset.selectedCommand;
-    delete inputElement.dataset.commandHint;
+    inputElement.readOnly = false;
 }

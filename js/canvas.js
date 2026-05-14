@@ -304,3 +304,63 @@ function clearCanvas(clearPointsFlag = true) {
     // 重新画网格
     drawGrid();
 }
+
+/**
+ * 重绘所有图形（从shapes数组）
+ * 清除标注点标记以允许重新标注
+ */
+function redrawShapes() {
+    const allShapes = window.shapes || [];
+    const allPoints = window.points || {};
+    
+    // 重置已标注点集合，允许重新标注
+    labeledPoints.clear();
+    
+    allShapes.forEach(shape => {
+        const pNames = shape.pointNames || [];
+        const shapePoints = pNames.map(n => allPoints[n]).filter(Boolean);
+        const color = shape.color || '#000';
+        const fill = shape.fill || false;
+        
+        switch (shape.type) {
+            case 'rectangle':
+                if (shapePoints.length >= 4) drawRectangle(shapePoints, color, fill);
+                break;
+            case 'triangle':
+                if (shapePoints.length >= 3) drawTriangle(shapePoints, color, fill);
+                break;
+            case 'segment':
+            case 'line':
+                if (shapePoints.length >= 2) drawLine(shapePoints, color);
+                break;
+            case 'circle':
+                if (shapePoints.length >= 1) {
+                    const r = shape.radius || 50;
+                    drawCircle(shapePoints[0], r, color, fill);
+                }
+                break;
+            case 'angle':
+                if (shapePoints.length >= 3) drawAngleShape(shapePoints, color);
+                break;
+            case 'point':
+                shapePoints.forEach(p => drawPoint(p, color));
+                break;
+            case 'function':
+                // 函数图形通过重绘函数曲线处理
+                if (window.functions && shape.funcKey && window.functions[shape.funcKey]) {
+                    // 留给函数绘制逻辑
+                }
+                break;
+        }
+    });
+    
+    // 重绘点标注（孤立的点也需要标注）
+    Object.values(allPoints).forEach(p => {
+        if (p && p.name && !labeledPoints.has(p.name)) {
+            labelPoint(p);
+        }
+    });
+    
+    // 重绘所有标注
+    if (typeof drawAnnotations === 'function') drawAnnotations();
+}

@@ -308,6 +308,9 @@ function smartSplitParameters(remaining, commandType) {
         '对称': { splitPoints: false },
         '对折': { splitPoints: false },
         '平移': { splitPoints: false },
+
+        // 标注：子命令不拆分
+        '标注': { splitPoints: false },
         
         // 点：可以拆分
         '点': { splitPoints: true, maxPoints: 10 }
@@ -471,6 +474,7 @@ function executeCommand(cmd, skipHistory = false) {
                 
                 // 重绘画布（不重绘历史命令，因为已经恢复了删除前的状态）
                 clearCanvas(false);
+                annotations.length = 0; // 清空标注，避免重执行时重复累积
                 commandHistory.forEach(c => {
                     const cmdToExecute = typeof c === 'string' ? c : c.cmd;
                     // 跳过删除命令，避免重新执行删除
@@ -509,6 +513,7 @@ function executeCommand(cmd, skipHistory = false) {
                 
                 // 重绘画布（不重绘历史命令，因为已经恢复了清空前的状态）
                 clearCanvas(false);
+                annotations.length = 0; // 清空标注，避免重执行时重复累积
                 commandHistory.forEach(c => {
                     const cmdToExecute = typeof c === 'string' ? c : c.cmd;
                     // 跳过清空和删除命令，避免重新执行
@@ -523,6 +528,7 @@ function executeCommand(cmd, skipHistory = false) {
             } else {
                 // 正常撤销：：清空画布并重新执行剩余命令
                 clearCanvas();
+                annotations.length = 0; // 清空标注，避免重执行时重复累积
                 
                 // 重新执行所有剩余命令
                 commandHistory.forEach(c => {
@@ -563,6 +569,7 @@ function executeCommand(cmd, skipHistory = false) {
                 
                 // 重绘画布
                 clearCanvas(false);
+                annotations.length = 0; // 清空标注，避免重执行时重复累积
                 commandHistory.forEach(c => {
                     const cmdToExecute = typeof c === 'string' ? c : c.cmd;
                     executeCommand(cmdToExecute, true);
@@ -596,7 +603,7 @@ function executeCommand(cmd, skipHistory = false) {
     let type = '';
     let remaining = '';
     
-    const typeKeywords = ['矩形', '长方形', '直线', '线段', '角', '圆', '点', '中点', '分点', '三角形', '坐标系', '正比例', '反比例', '二次函数', '函数', '旋转', '对称', '对折', '平移', '移动', '交点', '清空', '清除', '删除', 'remove', 'del'];
+    const typeKeywords = ['矩形', '长方形', '直线', '线段', '角', '圆', '点', '中点', '分点', '三角形', '坐标系', '正比例', '反比例', '二次函数', '函数', '旋转', '对称', '对折', '平移', '移动', '标注', '交点', '清空', '清除', '删除', 'remove', 'del'];
     for (const keyword of typeKeywords) {
         if (cmd.startsWith(keyword)) {
             type = keyword;
@@ -1191,16 +1198,34 @@ function executeCommand(cmd, skipHistory = false) {
             const shapePoints = getShapePoints(shapeName);
             if (shapePoints && shapePoints.length > 0) {
                 const newPoints = [];
+                // 先判断哪些点移动了，计算需要的新字母数量
+                let movedCount = 0;
+                const movedFlags = shapePoints.map((p, i) => {
+                    const rotated = rotatePoint(p, center, angle);
+                    const dx = Math.abs(rotated.x - p.x);
+                    const dy = Math.abs(rotated.y - p.y);
+                    const moved = dx > 0.5 || dy > 0.5;
+                    if (moved) movedCount++;
+                    return moved;
+                });
+                const newLetters = movedCount > 0 ? getNextAvailableLetters(movedCount) : [];
+                let letterIdx = 0;
                 shapePoints.forEach((p, i) => {
                     const rotated = rotatePoint(p, center, angle);
-                    const newName = shapeName[i] + "'";  // 添加撇号
-                    const newPoint = { name: newName, x: rotated.x, y: rotated.y };
-                    points[newName] = newPoint;
-                    newPoints.push(newPoint);
+                    if (movedFlags[i]) {
+                        // 点移动了，分配新字母
+                        const newName = newLetters[letterIdx++];
+                        const newPoint = { name: newName, x: rotated.x, y: rotated.y };
+                        points[newName] = newPoint;
+                        newPoints.push(newPoint);
+                    } else {
+                        // 点没移动，复用原点
+                        newPoints.push(points[shapeName[i]]);
+                    }
                 });
                 
                 // 绘制新图形
-                const newShapeName = shapeName + "'";
+                const newShapeName = newPoints.map(p => p.name).join('');
                 if (shapePoints.length === 3) {
                     drawTriangle(newPoints, color, false);
                     // 创建旋转后三角形的shape对象
@@ -1276,15 +1301,31 @@ function executeCommand(cmd, skipHistory = false) {
             const shapePoints = getShapePoints(shapeName);
             if (shapePoints && shapePoints.length > 0) {
                 const newPoints = [];
+                // 先判断哪些点移动了
+                let movedCount = 0;
+                const movedFlags = shapePoints.map((p, i) => {
+                    const reflected = reflectPoint(p, linePoint1, linePoint2);
+                    const dx = Math.abs(reflected.x - p.x);
+                    const dy = Math.abs(reflected.y - p.y);
+                    const moved = dx > 0.5 || dy > 0.5;
+                    if (moved) movedCount++;
+                    return moved;
+                });
+                const newLetters = movedCount > 0 ? getNextAvailableLetters(movedCount) : [];
+                let letterIdx = 0;
                 shapePoints.forEach((p, i) => {
                     const reflected = reflectPoint(p, linePoint1, linePoint2);
-                    const newName = shapeName[i] + "'";
-                    const newPoint = { name: newName, x: reflected.x, y: reflected.y };
-                    points[newName] = newPoint;
-                    newPoints.push(newPoint);
+                    if (movedFlags[i]) {
+                        const newName = newLetters[letterIdx++];
+                        const newPoint = { name: newName, x: reflected.x, y: reflected.y };
+                        points[newName] = newPoint;
+                        newPoints.push(newPoint);
+                    } else {
+                        newPoints.push(points[shapeName[i]]);
+                    }
                 });
                 
-                const newShapeName = shapeName + "'";
+                const newShapeName = newPoints.map(p => p.name).join('');
                 if (shapePoints.length === 3) {
                     drawTriangle(newPoints, color, false);
                     // 创建对称后三角形的shape对象
@@ -1372,15 +1413,31 @@ function executeCommand(cmd, skipHistory = false) {
             const shapePoints = getShapePoints(shapeName);
             if (shapePoints && shapePoints.length > 0) {
                 const newPoints = [];
+                // 先判断哪些点移动了
+                let movedCount = 0;
+                const movedFlags = shapePoints.map((p, i) => {
+                    const translated = translatePoint(p, dx, dy);
+                    const ddx = Math.abs(translated.x - p.x);
+                    const ddy = Math.abs(translated.y - p.y);
+                    const moved = ddx > 0.5 || ddy > 0.5;
+                    if (moved) movedCount++;
+                    return moved;
+                });
+                const newLetters = movedCount > 0 ? getNextAvailableLetters(movedCount) : [];
+                let letterIdx = 0;
                 shapePoints.forEach((p, i) => {
                     const translated = translatePoint(p, dx, dy);
-                    const newName = shapeName[i] + "'";
-                    const newPoint = { name: newName, x: translated.x, y: translated.y };
-                    points[newName] = newPoint;
-                    newPoints.push(newPoint);
+                    if (movedFlags[i]) {
+                        const newName = newLetters[letterIdx++];
+                        const newPoint = { name: newName, x: translated.x, y: translated.y };
+                        points[newName] = newPoint;
+                        newPoints.push(newPoint);
+                    } else {
+                        newPoints.push(points[shapeName[i]]);
+                    }
                 });
                 
-                const newShapeName = shapeName + "'";
+                const newShapeName = newPoints.map(p => p.name).join('');
                 if (shapePoints.length === 3) {
                     drawTriangle(newPoints, color, false);
                     // 创建平移后三角形的shape对象
@@ -1417,6 +1474,181 @@ function executeCommand(cmd, skipHistory = false) {
                         color: color,
                         fill: false
                     });
+                }
+            }
+        }
+    }
+    else if (type === '标注') {
+        // 格式：标注 等长 ab cd [ef ...]
+        //       标注 角度 b a c
+        //       标注 垂直 ab cd
+        //       标注 平行 ab cd
+        //       标注 长度 ab
+        //       标注 全等 三角形 abc def
+        const annoType = parts[1];
+        
+        if (annoType === '等长') {
+            // parts[2..] = 线段名列表，如 ["ab","cd"] 或 ["ab","cd","ef"]
+            const segments = [];
+            for (let i = 2; i < parts.length; i++) {
+                if (parts[i].length >= 2) segments.push(parts[i]);
+            }
+            if (segments.length >= 2) {
+                const segPoints = segments.map(seg => {
+                    const p1 = points[seg[0]];
+                    const p2 = points[seg[1]];
+                    return p1 && p2 ? { p1, p2, name: seg } : null;
+                }).filter(Boolean);
+                
+                if (segPoints.length >= 2) {
+                    // 查找已有的等长标注组，看这些线段是否已经在某组中
+                    // 如果是同组新加入，增加标记数量；否则新建组
+                    let group = annotations.find(a => a.type === '等长' && 
+                        a.segments.some(s => segPoints.some(sp => sp.name === s.name)));
+                    
+                    if (group) {
+                        // 加入已有组
+                        segPoints.forEach(sp => {
+                            if (!group.segments.some(s => s.name === sp.name)) {
+                                group.segments.push(sp);
+                            }
+                        });
+                    } else {
+                        group = { type: '等长', segments: segPoints, tickCount: 1 };
+                        annotations.push(group);
+                        // 检查是否和已有的等长组共享标记数
+                        // 同组数量 = 已有等长组数 + 1
+                        const eqGroups = annotations.filter(a => a.type === '等长');
+                        group.tickCount = eqGroups.length; // 不同组用不同数量的tick
+                    }
+                    
+                    // 重新计算所有等长组的tick数（按创建顺序）
+                    const eqGroups = annotations.filter(a => a.type === '等长');
+                    eqGroups.forEach((g, idx) => { g.tickCount = idx + 1; });
+                    
+                    clearCanvas(false);
+                    redrawShapes();
+                    console.log(`已标注等长: ${segments.join(' ')}`);
+                }
+            }
+        }
+        else if (annoType === '角度') {
+            // parts[2..4] = 三个点名称（顶点 边1点 边2点）
+            const pNames = [];
+            for (let i = 2; i < parts.length; i++) {
+                if (parts[i].length === 1) pNames.push(parts[i]);
+            }
+            if (pNames.length >= 3) {
+                const vertex = points[pNames[0]];
+                const arm1 = points[pNames[1]];
+                const arm2 = points[pNames[2]];
+                
+                if (vertex && arm1 && arm2) {
+                    annotations.push({
+                        type: '角度',
+                        vertex: { name: pNames[0], x: vertex.x, y: vertex.y },
+                        arm1: { name: pNames[1], x: arm1.x, y: arm1.y },
+                        arm2: { name: pNames[2], x: arm2.x, y: arm2.y }
+                    });
+                    
+                    clearCanvas(false);
+                    redrawShapes();
+                    console.log(`已标注角度: ${pNames.join('')}`);
+                }
+            }
+        }
+        else if (annoType === '垂直') {
+            // parts[2..3] = 两条线段名
+            const segments = [];
+            for (let i = 2; i < parts.length; i++) {
+                if (parts[i].length >= 2) segments.push(parts[i]);
+            }
+            if (segments.length >= 2) {
+                const p1 = points[segments[0][0]], p2 = points[segments[0][1]];
+                const p3 = points[segments[1][0]], p4 = points[segments[1][1]];
+                
+                if (p1 && p2 && p3 && p4) {
+                    annotations.push({
+                        type: '垂直',
+                        seg1: { p1: {x:p1.x,y:p1.y}, p2: {x:p2.x,y:p2.y}, name: segments[0] },
+                        seg2: { p1: {x:p3.x,y:p3.y}, p2: {x:p4.x,y:p4.y}, name: segments[1] }
+                    });
+                    
+                    clearCanvas(false);
+                    redrawShapes();
+                    console.log(`已标注垂直: ${segments.join(' ')}`);
+                }
+            }
+        }
+        else if (annoType === '平行') {
+            const segments = [];
+            for (let i = 2; i < parts.length; i++) {
+                if (parts[i].length >= 2) segments.push(parts[i]);
+            }
+            if (segments.length >= 2) {
+                const p1 = points[segments[0][0]], p2 = points[segments[0][1]];
+                const p3 = points[segments[1][0]], p4 = points[segments[1][1]];
+                
+                if (p1 && p2 && p3 && p4) {
+                    annotations.push({
+                        type: '平行',
+                        seg1: { p1: {x:p1.x,y:p1.y}, p2: {x:p2.x,y:p2.y}, name: segments[0] },
+                        seg2: { p1: {x:p3.x,y:p3.y}, p2: {x:p4.x,y:p4.y}, name: segments[1] }
+                    });
+                    
+                    clearCanvas(false);
+                    redrawShapes();
+                    console.log(`已标注平行: ${segments.join(' ')}`);
+                }
+            }
+        }
+        else if (annoType === '长度') {
+            // parts[2] = 线段名
+            if (parts[2] && parts[2].length >= 2) {
+                const seg = parts[2];
+                const p1 = points[seg[0]], p2 = points[seg[1]];
+                
+                if (p1 && p2) {
+                    annotations.push({
+                        type: '长度',
+                        seg: { p1: {x:p1.x,y:p1.y}, p2: {x:p2.x,y:p2.y}, name: seg }
+                    });
+                    
+                    clearCanvas(false);
+                    redrawShapes();
+                    console.log(`已标注长度: ${seg}`);
+                }
+            }
+        }
+        else if (annoType === '全等') {
+            // 格式：标注 全等 三角形 abc def
+            //       标注 全等 矩形 abcd efgh
+            const shapeType = parts[2]; // 三角形 or 矩形
+            const name1 = parts[3]; // 第一组点名称
+            const name2 = parts[4]; // 第二组点名称
+            
+            if (shapeType && name1 && name2) {
+                const group1 = [];
+                const group2 = [];
+                for (const ch of name1) { if (points[ch]) group1.push({name:ch, x:points[ch].x, y:points[ch].y}); }
+                for (const ch of name2) { if (points[ch]) group2.push({name:ch, x:points[ch].x, y:points[ch].y}); }
+                
+                if (group1.length >= 3 && group2.length >= 3 && group1.length === group2.length) {
+                    // 分配颜色
+                    const congruentCount = annotations.filter(a => a.type === '全等').length;
+                    const colorIndex = congruentCount % congruentColors.length;
+                    
+                    annotations.push({
+                        type: '全等',
+                        shapeType: shapeType === '矩形' ? 'rectangle' : 'triangle',
+                        group1: group1,
+                        group2: group2,
+                        color: congruentColors[colorIndex]
+                    });
+                    
+                    clearCanvas(false);
+                    redrawShapes();
+                    console.log(`已标注全等: ${shapeType} ${name1} ${name2}`);
                 }
             }
         }
