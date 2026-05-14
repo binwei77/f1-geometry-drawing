@@ -82,6 +82,7 @@ function removeShapesByType(type) {
         '线段': 'segment', '直线': 'line',
         '角': 'angle',
         '中点': 'midpoint', '分点': 'division',
+        '函数': 'function',
         '旋转': 'rotate', '对称': 'reflect', '对折': 'fold', '平移': 'translate'
     };
     const targetType = typeMap[type] || type;  // 如果已经是英文类型则直接使用
@@ -462,28 +463,54 @@ function executeCommand(cmd, skipHistory = false) {
                     labeledPoints.add(pointName);
                 });
                 
-                // 恢复图形对象（如果有）— 同时恢复到shapes和shapeList
-                if (lastCmd.deletedShape) {
-                    shapes.push(lastCmd.deletedShape);
-                    // 同步到shapeList（重新添加图形记录）
-                    if (lastCmd.deletedShapeListEntry) {
-                        shapeList.push(lastCmd.deletedShapeListEntry);
+                // 新式删除函数保存了完整快照，直接恢复
+                if (lastCmd.deletedState.shapes && lastCmd.deletedState.shapeList) {
+                    // 恢复shapes数组
+                    shapes.length = 0;
+                    lastCmd.deletedState.shapes.forEach(s => shapes.push(s));
+                    
+                    // 恢复shapeList
+                    shapeList.length = 0;
+                    lastCmd.deletedState.shapeList.forEach(s => shapeList.push(s));
+                    
+                    // 恢复functions
+                    if (lastCmd.deletedState.functions) {
+                        Object.keys(functions).forEach(key => delete functions[key]);
+                        Object.assign(functions, lastCmd.deletedState.functions);
                     }
-                    console.log('已恢复图形对象');
+                    
+                    // 恢复globalColor
+                    if (lastCmd.deletedState.globalColor !== undefined) {
+                        globalColor = lastCmd.deletedState.globalColor;
+                    }
+                    
+                    // 重建画布
+                    rebuildCanvas();
+                    console.log('撤销删除，已恢复完整状态');
+                } else {
+                    // 旧式删除逻辑：恢复图形对象
+                    if (lastCmd.deletedShape) {
+                        shapes.push(lastCmd.deletedShape);
+                        // 同步到shapeList（重新添加图形记录）
+                        if (lastCmd.deletedShapeListEntry) {
+                            shapeList.push(lastCmd.deletedShapeListEntry);
+                        }
+                        console.log('已恢复图形对象');
+                    }
+                    
+                    // 重绘画布（不重绘历史命令，因为已经恢复了删除前的状态）
+                    clearCanvas(false);
+                    annotations.length = 0; // 清空标注，避免重执行时重复累积
+                    commandHistory.forEach(c => {
+                        const cmdToExecute = typeof c === 'string' ? c : c.cmd;
+                        // 跳过删除命令，避免重新执行删除
+                        if (!cmdToExecute.includes('删除') && !cmdToExecute.includes('remove') && !cmdToExecute.includes('del')) {
+                            executeCommand(cmdToExecute, true);
+                        }
+                    });
+                    
+                    console.log('撤销删除，已恢复对象');
                 }
-                
-                // 重绘画布（不重绘历史命令，因为已经恢复了删除前的状态）
-                clearCanvas(false);
-                annotations.length = 0; // 清空标注，避免重执行时重复累积
-                commandHistory.forEach(c => {
-                    const cmdToExecute = typeof c === 'string' ? c : c.cmd;
-                    // 跳过删除命令，避免重新执行删除
-                    if (!cmdToExecute.includes('删除') && !cmdToExecute.includes('remove') && !cmdToExecute.includes('del')) {
-                        executeCommand(cmdToExecute, true);
-                    }
-                });
-                
-                console.log('撤销删除，已恢复对象');
             }
             // 如果撤销的是清空命令，需要恢复清空前的状态
             else if ((cmdStr === '清空' || cmdStr === '清除') && lastCmd.clearedState) {
@@ -1087,6 +1114,12 @@ function executeCommand(cmd, skipHistory = false) {
             }
         }
         drawLinear(k, funcColor);
+        // 记录到shapeList
+        addShapeToList('function', '正比例y=' + k + 'x', [], {
+            shape: { type: 'function', subType: 'linear', k: k, color: funcColor, name: '正比例y=' + k + 'x' },
+            points: [],
+            type: 'function'
+        });
     }
     else if (type === '反比例') {
         let k = 1;
@@ -1099,6 +1132,12 @@ function executeCommand(cmd, skipHistory = false) {
             }
         }
         drawInverse(k, funcColor);
+        // 记录到shapeList
+        addShapeToList('function', '反比例y=' + k + '/x', [], {
+            shape: { type: 'function', subType: 'inverse', k: k, color: funcColor, name: '反比例y=' + k + '/x' },
+            points: [],
+            type: 'function'
+        });
     }
     else if (type === '二次函数') {
         let a = 1, b = 0, c = 0;
@@ -1115,6 +1154,12 @@ function executeCommand(cmd, skipHistory = false) {
             }
         }
         drawQuadratic(a, b, c, funcColor);
+        // 记录到shapeList
+        addShapeToList('function', '二次y=' + a + 'x²+' + b + 'x+' + c, [], {
+            shape: { type: 'function', subType: 'quadratic', a: a, b: b, c: c, color: funcColor, name: '二次y=' + a + 'x²+' + b + 'x+' + c },
+            points: [],
+            type: 'function'
+        });
     }
     else if (type === '函数') {
         // 支持两种格式：
@@ -1145,6 +1190,12 @@ function executeCommand(cmd, skipHistory = false) {
             // 保存函数信息
             const funcName = 'F' + (Object.keys(functions).length + 1);
             functions[funcName] = { type: 'linear', a, b, color: funcColor };
+            // 记录到shapeList
+            addShapeToList('function', '一次y=' + a + 'x+' + b, [], {
+                shape: { type: 'function', subType: 'linear', a: a, b: b, color: funcColor, name: '一次y=' + a + 'x+' + b },
+                points: [],
+                type: 'function'
+            });
             console.log(`已保存一次函数 ${funcName}: y=${a}x${b >= 0 ? '+' + b : b}`);
         } else if (funcType === '二次' || remaining.includes('²')) {
             // 二次函数
@@ -1164,6 +1215,12 @@ function executeCommand(cmd, skipHistory = false) {
             // 保存函数信息
             const funcName = 'F' + (Object.keys(functions).length + 1);
             functions[funcName] = { type: 'quadratic', a, b, c, color: funcColor };
+            // 记录到shapeList
+            addShapeToList('function', '二次y=' + a + 'x²+' + b + 'x+' + c, [], {
+                shape: { type: 'function', subType: 'quadratic', a: a, b: b, c: c, color: funcColor, name: '二次y=' + a + 'x²+' + b + 'x+' + c },
+                points: [],
+                type: 'function'
+            });
             console.log(`已保存二次函数 ${funcName}: y=${a}x²${b >= 0 ? '+' + b : b}x${c >= 0 ? '+' + c : c}`);
         }
     }
@@ -2362,6 +2419,13 @@ function deleteLatestShape(skipHistory = false) {
     }
     
     const shape = shapeList.pop();
+    // 同步从shapes数组中删除对应的shape对象
+    if (shape && shape.data && shape.data.shape) {
+        const shapeIdx = shapes.findIndex(s => s.name === shape.name);
+        if (shapeIdx !== -1) {
+            shapes.splice(shapeIdx, 1);
+        }
+    }
     rebuildCanvas();
     console.log('已删除最新图形：' + shape.name);
 }
@@ -2412,7 +2476,10 @@ function redrawShape(shape) {
     const pts = pn.map(n => points[n]).filter(Boolean);
     
     // 重绘
-    if (shapeData.type === 'line' || shapeData.type === 'segment') {
+    if (shapeData.type === 'point') {
+        const pt = points[shapeData.name];
+        if (pt) drawPoint(pt, shapeData.color);
+    } else if (shapeData.type === 'line' || shapeData.type === 'segment') {
         if (pts.length >= 2) drawLine(pts, shapeData.color);
     } else if (shapeData.type === 'rectangle') {
         if (pts.length >= 4) drawRectangle(pts, shapeData.color, shapeData.fill);
@@ -2424,5 +2491,13 @@ function redrawShape(shape) {
         if (pts.length >= 3) drawTriangle(pts, shapeData.color, shapeData.fill);
     } else if (shapeData.type === 'angle') {
         if (pts.length >= 3) drawAngle(pts[0], pts[1], pts[2], shapeData.color);
+    } else if (shapeData.type === 'function') {
+        if (shapeData.subType === 'linear') {
+            drawLinear(shapeData.k !== undefined ? shapeData.k : shapeData.a, shapeData.color);
+        } else if (shapeData.subType === 'inverse') {
+            drawInverse(shapeData.k, shapeData.color);
+        } else if (shapeData.subType === 'quadratic') {
+            drawQuadratic(shapeData.a, shapeData.b, shapeData.c, shapeData.color);
+        }
     }
 }
